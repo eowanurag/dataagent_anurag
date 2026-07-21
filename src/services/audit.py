@@ -22,6 +22,7 @@ def record_audit(
     row_count: int | None = None,
     latency_ms: int | None = None,
     error_message: str | None = None,
+    payload: str | None = None,
     metadata: dict | None = None,
     run_id: str | None = None,
 ) -> None:
@@ -35,11 +36,11 @@ def record_audit(
                 INSERT INTO audit_events (
                     investigation_id, run_id, actor_user_id, actor_unit, actor_rank,
                     action, resource_type, resource_id, source, sql, row_count,
-                    latency_ms, error_message, metadata, created_at
+                    latency_ms, error_message, payload, created_at
                 ) VALUES (
                     :investigation_id, :run_id, :actor_user_id, :actor_unit, :actor_rank,
                     :action, :resource_type, :resource_id, :source, :sql, :row_count,
-                    :latency_ms, :error_message, :metadata, :created_at
+                    :latency_ms, :error_message, :payload, :created_at
                 )
                 """
                 ),
@@ -57,7 +58,7 @@ def record_audit(
                     "row_count": row_count,
                     "latency_ms": latency_ms,
                     "error_message": error_message,
-                    "metadata": None if metadata is None else str(metadata),
+                    "payload": str(payload) if payload is not None else None,
                     "created_at": now,
                 },
             )
