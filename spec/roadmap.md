@@ -1,62 +1,118 @@
 # Roadmap
 
-> Fill in each section. Run `/zero-shot-build [your idea]` to have it filled automatically.
+> **Assumed:** production-grade, full audit trail, RBAC by rank/unit, on-premises-first.
 
 ---
 
 ## What This Agent Does
 
-<!-- FILL IN: One paragraph describing what this agent does, who uses it, and what problem it solves. -->
+A data analyst assistant for UP Police that lets analysts upload CSV exports and/or connect
+to a live MsSQL analytical database, then ask analytical questions in plain English. The
+agent plans each question, builds/sanitises SQL when needed over the dataset, executes safely,
+and returns a cited answer with optional charts, follow-ups, and an audit log of every
+query asked. Complex investigations are threaded across turns with preserved history.
 
 ## Who Uses It
 
-<!-- FILL IN: Primary user(s). What is their role? What are they trying to accomplish? -->
+Police analysts, investigators, and officers with rank/unit-based access who need fast
+answers from criminal, traffic, or administrative datasets without writing SQL or leaving
+audit gaps.
 
 ## Core Problem Being Solved
 
-<!-- FILL IN: What manual or broken process does this agent replace or improve? -->
+Analysts manually export CSVs, open them in Excel/Power BI, and rebuild similar filters
+many times a day. Large MsSQL analytical databases are sensitive; ad-hoc queries and full
+data dumps risk load spikes and unaudited access. This agent provides a governed,
+question-first interface with complete audit trail and live-DB minimisation built in.
 
 ## Success Criteria
 
-<!-- FILL IN: How do we know the agent is working? List 3-5 measurable outcomes. -->
-
-- [ ] <!-- criterion 1 -->
-- [ ] <!-- criterion 2 -->
-- [ ] <!-- criterion 3 -->
+- [ ] An analyst uploads a CSV and gets a real cited answer to a natural-language question
+- [ ] The agent produces charts and follow-up suggestions when relevant
+- [ ] A full investigation thread is preserved across 5+ follow-up questions
+- [ ] Every SQL/stat query and its result is recorded in an audit log
+- [ ] Role/unit-based access is enforced on uploads, investigations, and live DB access
+- [ ] Against a large live MsSQL source, the agent produces answers without fan-out full-table
+  reads or unbounded `SELECT *` queries
 
 ## What This Agent Does NOT Do (Out of Scope)
 
-<!-- FILL IN: Explicit exclusions prevent scope creep. List things the agent will never do. -->
+- Execute writes, DDL, or stored procedures on the live MsSQL
+- Replace structured BI dashboards; it supplements ad-hoc questions
+- Train models on police data or perform predictive scoring
+- Expose row-level security modelled after MsSQL's own permissions; it adds an application
+  layer on top
 
 ## Key Constraints
 
-<!-- FILL IN: Hard limits — budget, latency, compliance, API rate limits, etc. -->
+- On-prem / air-gapped-first design; no third-party data exfil
+- Read-only access to live MsSQL; no write operations ever
+- Full audit trail for every analytics query executed
+- Latency-conscious against large tables (hundreds of thousands to millions of rows)
+- RBAC by rank/unit on every query and investigation
+- End-to-end encryption at application layer where required
+
+---
 
 ## Phases of Development
 
-<!-- FILL IN: The spec-writer fills these in. One phase = one user-testable increment, behind a human testing gate. Default each phase's slices to INDEPENDENT so generators build them concurrently; declare a dependency only when a slice truly needs another's output. Use the per-phase template below — one block per phase. -->
+> **Phase 1 is the smallest first-time-right user-testable win.** It must work the first
+> time the user tests it — zero rough edges on the tested path. Its frontend is visually
+> complete: real UI for the one working path PLUS clearly-labelled NON-FUNCTIONAL stubs for
+> everything coming later.
 
-> **Phase 1 is the smallest first-time-right user-testable win.** It must work perfectly the first time the user tests it — zero rough edges on the tested path. Its backend is minimal but REAL on the one core path (no fake data on the tested path). Its frontend is visually complete: real UI for the one working path PLUS clearly-labelled NON-FUNCTIONAL stubs for everything coming later, so the user sees the vision (a stub must never be mistaken for a bug). Each later phase wires those stubs into real functionality, one increment at a time.
+### Phase 1 — CSV Chat MVP
 
-### Phase 1 — <!-- short name -->
-
-- **Goal:** <!-- FILL IN: the single smallest user-testable win this phase delivers. -->
-- **Independent slices (parallel build units):** <!-- FILL IN: each slice is a disjoint unit a single generator owns. Note its surface (frontend / backend) and any declared dependency on another slice (default: none). -->
-  - `slice-a` (backend) — <!-- what it builds; deps: none -->
-  - `slice-b` (frontend) — <!-- what it builds; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN: the files/dirs each slice touches. frontend writes the frontend surface; backend writes src/. Never the same file. -->
-- **Gate command:** <!-- FILL IN: one exact runnable command that proves the phase works — real LLM/API via .env keys, production DB driver (never SQLite-as-substitute). e.g. `uv run pytest tests/test_phase1.py` -->
-- **How the user tests it (handoff seed):** <!-- FILL IN: exact run command(s), what to click / look at, the expected result, and which parts are labelled stubs vs real. -->
-
-### Phase 2 — <!-- short name -->
-
-- **Goal:** <!-- FILL IN: next user-testable increment (typically wires a Phase-1 stub into real functionality). -->
+- **Goal:** One real end-to-end flow: upload CSV → ask a plain-English question →
+  receive a cited answer with optional chart; investigation persists in session.
 - **Independent slices (parallel build units):**
-  - `slice-a` (backend) — <!-- ...; deps: none -->
-  - `slice-b` (frontend) — <!-- ...; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN -->
-- **Gate command:** <!-- FILL IN: exact runnable command, real LLM/API + production DB driver -->
-- **How the user tests it (handoff seed):** <!-- FILL IN -->
+  - `slice-a` (backend) — RBAC + file ingestion + schema acquisition artefacts + chat-history
+    persistence (SQLite); deps: none
+  - `slice-b` (backend) — LangGraph ReAct agent with tool-use nodes: plan question, generate
+    SQL via LLM, execute via SQLite/pandas, render textual answer; deps: none
+  - `slice-c` (frontend) — Replace `/app` with investigation UI: upload, chat, results,
+    history sidebar; deps: none
+- **Key surfaces / files:**
+  - `src/api/`, `src/db/`, `src/graph/nodes.py`, `src/prompts/`, `src/llm/`, `src/tools/`
+  - `frontend/public/index.html`, `frontend/public/app.js`, `frontend/public/styles.css`
+- **Gate command:** `uv run pytest tests -q && uv run pytest tests/integration -q`
+- **How the user tests it (handoff seed):**
+  - `cp .env.example .env`; set `AGENT_OPENROUTER_API_KEY`; run `uv run python -m src`
+  - Open `http://localhost:8001/app/`
+  - Log in via RBAC form (demo credentials); upload a CSV; ask "Show top 5 districts by
+    count"; expect a table + chart + cited numbers. History appears in sidebar.
 
-<!-- Repeat the per-phase block for every phase. -->
+### Phase 2 — Investigations + Outputs
+
+- **Goal:** Cross-session investigations with full chat history, downloadable reports
+  (CSV / PDF), and chart gallery.
+- **Independent slices (parallel build units):**
+  - `slice-a` (backend) — investigation threading model + PDF export via HTML-to-PDF; deps: Phase 1
+  - `slice-b` (backend) — CSV export + follow-up suggestion engine; deps: Phase 1
+  - `slice-c` (frontend) — chart renderer, history browser, export buttons; deps: Phase 1
+- **Key surfaces / files:** upgrades to `src/graph/`, `src/api/`, `src/db/models.py`,
+  `frontend/public/`
+- **Gate command:** `uv run pytest tests -q`
+- **How the user tests it:**
+  - Reopen a saved investigation; ask a follow-up; chart updates; export CSV + PDF from UI;
+  audit log shows both export events.
+
+### Phase 3 — Live MsSQL Integration
+
+- **Goal:** Add a live MsSQL analytical source as a queryable data source with protections:
+  read-only role, explicit allow-list / schema introspection, row budget, and audit capture.
+- **Independent slices (parallel build units):**
+  - `slice-a` (backend) — read-only MsSQL driver integration, schema introspection, SQL
+    sanitisation layer, query budget + safety checks; deps: Phase 2
+  - `slice-b` (backend) — agent routing between CSV/PDB and MsSQL; cost/latency-aware tool
+    selection; deps: Phase 2
+  - `slice-c` (frontend) — source switcher, live-DB status indicator, query audit viewer;
+    deps: Phase 2
+- **Key surfaces / files:** new `src/db/repositories/`, `src/graph/tools/ms_sql_tool.py`,
+  `src/api/sources.py`, `spec/architecture.md` updated
+- **Gate command:** `uv run pytest tests -q`
+- **How the user tests it:**
+  - Add MsSQL connection string in `.env`; approve schema; ask "Compare FIR counts by
+  district for last quarter"; expect answer + row-count filter + audit log entry with SQL.
+  Confirm no DDML passes sanitisation.
 
