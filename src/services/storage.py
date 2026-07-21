@@ -13,19 +13,19 @@ def _storage_root() -> Path:
 def write_attachment(file_id: str, payload: bytes) -> Path:
     root = _storage_root()
     root.mkdir(parents=True, exist_ok=True)
-    target = root / f"{file_id}.csv"
+    target = root / file_id
     target.write_bytes(payload)
     return target
 
 
 def read_attachment(file_id: str) -> Path:
-    candidate = _storage_root() / f"{file_id}.csv"
+    candidate = _storage_root() / file_id
     if not candidate.exists():
         raise FileNotFoundError(file_id)
     return candidate
 
 
 def remove_attachment(file_id: str) -> None:
-    candidate = _storage_root() / f"{file_id}.csv"
+    candidate = _storage_root() / file_id
     if candidate.exists():
         candidate.unlink()

@@ -39,16 +39,16 @@ def query_sql(file_id: str, sql: str, max_rows: int = 5000) -> pd.DataFrame:
         raise CsvQueryError("sql is empty")
     if max_rows <= 0:
         raise CsvQueryError("max_rows must be > 0")
-    for bad in ("--", ";", "/*", "*/", "@@", "\\"):
+    for bad in ("--", ";", "/*", "*/", "@@", "\\", " DROP ", " DELETE ", " UPDATE ", " INSERT ", " ALTER ", " TRUNCATE ", " EXEC ", " EXECUTE "):
         if bad in sql:
             raise CsvQueryError(f"unsupported sql fragment: {bad}")
     path = read_attachment(file_id)
+    conn = sqlite3.connect(":memory:")
     try:
         df = pd.read_csv(path)
-        conn = sqlite3.connect(":memory:")
-        df.to_sql(_resolve_table_name(file_id), conn, index=False, if_exists="replace")
-        query = f"SELECT * FROM {_resolve_table_name(file_id)} LIMIT {int(max_rows)}"
-        result = pd.read_sql(query, conn)
+        table = _resolve_table_name(file_id)
+        df.to_sql(table, conn, index=False, if_exists="replace")
+        result = pd.read_sql(f"{sql.strip()} LIMIT {int(max_rows)}", conn)
         return result
     except CsvQueryError:
         raise

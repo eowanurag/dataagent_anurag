@@ -26,19 +26,16 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(default="sqlite:///./data/app.db")
-
-    # "auto" resolves to whichever provider key is set.
     llm_provider: str = Field(default="auto")
     llm_model: str = Field(default="")
-
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
-
     log_level: str = Field(default="INFO")
+    storage_root: str = Field(default=".")
+    max_query_rows: int = Field(default=5000)
 
-    # ----- derived -----
     def resolve_provider(self) -> str:
         """The effective provider name, or ``"stub"`` when no key is present."""
         p = (self.llm_provider or "auto").strip().lower()

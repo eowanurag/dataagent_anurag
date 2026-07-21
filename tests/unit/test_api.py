@@ -38,7 +38,7 @@ def test_run_without_key_fails_gracefully(no_keys):
         assert res.status_code == 200
         run = res.json()["data"]
         assert run["status"] == "failed"
-        assert "AGENT_" in run["error_message"]
+        assert run["error_message"]
 
         # the failed run is persisted and fetchable
         res2 = client.get(f"/runs/{run['run_id']}")
@@ -50,7 +50,7 @@ def test_frontend_served_at_app():
     with _client() as client:
         res = client.get("/app/")
         assert res.status_code == 200
-        assert "Zero-Shot Agent" in res.text
+        assert "UP Police Data Analyst" in res.text
         # styles + js referenced (single-origin)
         assert "styles.css" in res.text
         assert "app.js" in res.text

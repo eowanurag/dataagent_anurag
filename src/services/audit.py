@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import text as sql_text
 
@@ -29,22 +30,25 @@ def record_audit(
     log = get_logger("audit")
     try:
         now = datetime.now(timezone.utc)
+        audit_id = str(uuid4())
+        payload_value = str(payload) if payload is not None else (str(metadata) if metadata is not None else None)
         with create_db_session() as session:
             session.execute(
                 sql_text(
                     """
                 INSERT INTO audit_events (
-                    investigation_id, run_id, actor_user_id, actor_unit, actor_rank,
+                    audit_id, investigation_id, run_id, actor_user_id, actor_unit, actor_rank,
                     action, resource_type, resource_id, source, sql, row_count,
                     latency_ms, error_message, payload, created_at
                 ) VALUES (
-                    :investigation_id, :run_id, :actor_user_id, :actor_unit, :actor_rank,
+                    :audit_id, :investigation_id, :run_id, :actor_user_id, :actor_unit, :actor_rank,
                     :action, :resource_type, :resource_id, :source, :sql, :row_count,
                     :latency_ms, :error_message, :payload, :created_at
                 )
                 """
                 ),
                 {
+                    "audit_id": audit_id,
                     "investigation_id": investigation_id,
                     "run_id": run_id,
                     "actor_user_id": actor_user_id,
@@ -58,7 +62,7 @@ def record_audit(
                     "row_count": row_count,
                     "latency_ms": latency_ms,
                     "error_message": error_message,
-                    "payload": str(payload) if payload is not None else None,
+                    "payload": payload_value,
                     "created_at": now,
                 },
             )

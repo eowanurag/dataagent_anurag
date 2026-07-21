@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from src.api._common import api_error, ok
 from src.config.settings import get_settings
-from src.db.session import get_session
+from src.db.models import RunRow
+from src.db.session import create_db_session, get_session
 from src.observability.events import get_logger, log_span
 from src.services.audit import record_audit
 from src.services.storage import write_attachment
@@ -82,11 +83,24 @@ def _init_schema() -> None:
             row_count INTEGER,
             latency_ms INTEGER,
             error_message TEXT,
-            metadata TEXT,
+            payload TEXT,
             created_at TEXT
         )""",
         "CREATE INDEX IF NOT EXISTS idx_audit_investigation_id ON audit_events(investigation_id)",
         "CREATE INDEX IF NOT EXISTS idx_audit_run_id ON audit_events(run_id)",
+        """CREATE TABLE IF NOT EXISTS runs (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            input_text TEXT NOT NULL,
+            instruction TEXT NOT NULL,
+            output_text TEXT,
+            provider TEXT,
+            model TEXT,
+            error_message TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)",
     ]
     with create_db_session() as session:
         for stmt in statements:
@@ -186,15 +200,13 @@ def upload_file(investigation_id: str, file: UploadFile = File(...), session: Se
         raise api_error("not_found", "investigation not found", 404)
 
     payload = file.file.read()
-    suffix = Path(file.filename or "upload.csv").suffix or ".csv"
-    file_id = f"file-{investigation_id}"
-    stored = write_attachment(file_id, payload)
+    file_rec_id = f"f-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+    stored = write_attachment(file_rec_id, payload)
 
     df = pd.read_csv(stored, nrows=1000)
     row_count = int(pd.read_csv(stored).shape[0])
     columns = list(df.columns)
 
-    file_rec_id = f"f-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
     session.execute(
         sql_text(
             "INSERT INTO investigation_files (file_id, investigation_id, filename, original_filename, content_type, size_bytes, row_count, columns_json, created_at) "
@@ -310,38 +322,42 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
     followup_suggestions = None
     status = "completed"
 
+    run_row = RunRow(
+        id=user_msg_id,
+        status="running",
+        input_text=question,
+        instruction="investigation",
+        provider=get_settings().resolve_provider(),
+        model=get_settings().resolve_model(),
+    )
+    session.add(run_row)
+    session.commit()
     t0 = __import__("time").perf_counter()
     try:
-        with log_span(log, "plan_csv_question", investigation_id=investigation_id):
-            schema = inspect_schema(file_id)
+        from src.graph.runner import run_investigation_graph
 
-        with log_span(log, "answer_over_csv", investigation_id=investigation_id):
-            sql_text_str = f"SELECT {', '.join(schema['columns'])} FROM uploaded_data LIMIT 5000"
-            sql_rows_df = query_sql(file_id, sql_text_str, max_rows=get_settings().max_query_rows)
-            sql_row_count = int(sql_rows_df.shape[0])
-
-            sample_md = sql_rows_df.head(50).to_markdown(index=False)
-            answer_text = (
-                f"Based on the uploaded data ({schema['row_count']} rows), "
-                f"the result set has {sql_row_count} rows.\n\n"
-                f"Question: {question}\n\n"
-                f"Result:\n{sample_md}"
-            )
-            citations_list = [
-                {"source": file_row.original_filename, "rows": sql_row_count, "sql": sql_text_str, "latency_ms": None}
-            ]
-            followup_suggestions = [
-                "Filter by a specific column value",
-                "Group and aggregate the result",
-                "Sort by the highest value",
-            ]
-            chart_spec = {"type": "table", "data": sql_rows_df.head(200).to_dict(orient="records")}
+        result = run_investigation_graph(
+            investigation_id=investigation_id,
+            run_id=user_msg_id,
+            user_id=actor["user_id"],
+            question=question,
+            source="csv",
+        )
+        status = result.get("status") or "completed"
+        run_row.status = status
+        run_row.output_text = result.get("answer_text")
+        run_row.error_message = result.get("error")
+        run_row.updated_at = datetime.now(timezone.utc)
+        session.commit()
     except Exception as exc:  # noqa: BLE001
         log.error("run_failed", error=str(exc))
         status = "failed"
-        answer_text = f"Analysis failed: {exc}"
-    finally:
-        latency_ms = int((__import__("time").perf_counter() - t0) * 1000)
+        run_error = str(exc)
+        run_row.status = "failed"
+        run_row.error_message = str(exc)
+        run_row.updated_at = datetime.now(timezone.utc)
+        session.commit()
+    latency_ms = int((__import__("time").perf_counter() - t0) * 1000)
 
     assistant_msg_id = f"msg-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
     now = _now_iso()
@@ -364,7 +380,7 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
         row_count=sql_row_count,
         latency_ms=latency_ms,
         error_message=answer_text if status == "failed" else None,
-        metadata={"question": question},
+        payload={"question": question},
     )
 
     return ok({
