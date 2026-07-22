@@ -6,10 +6,21 @@ from typing import TypedDict
 
 class AgentState(TypedDict, total=False):
     run_id: str
-    input_text: str
-    instruction: str
-    output_text: str
-    provider: str
-    model: str
-    status: str
+    investigation_id: str
+    user_id: str
+    source: str | None
+    question: str
+    plan: str | None
+    sql: str | None
+    sql_rows: list[dict] | None
+    sql_row_count: int | None
+    chart_spec: dict | None
+    followup_suggestions: list[str] | None
+    answer_text: str | None
+    citations: list[str] | None
     error: str | None
+    status: str | None
+    checkpoint: str | None
+    provider: str | None
+    model: str | None
+    input_text: str | None
