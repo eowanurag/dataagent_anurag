@@ -206,7 +206,7 @@ def get_er_diagram(investigation_id: str, session: Session = Depends(get_session
         mermaid_lines.append("")
         mermaid_lines.append(f"    {entity['id']} {{")
         for col in entity.get("columns") or []:
-            mermaid_lines.append(f"        {_escape(str(col))}")
+            mermaid_lines.append(f"        {_escape(str(col))} TEXT")
         mermaid_lines.append("    }")
 
     mermaid_lines.append("")
