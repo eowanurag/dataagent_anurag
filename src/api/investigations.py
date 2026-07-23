@@ -189,6 +189,35 @@ def update_investigation(investigation_id: str, payload: dict[str, Any], session
     })
 
 
+@router.get("/investigations/{investigation_id}/files")
+def get_files(investigation_id: str, session: Session = Depends(get_session)) -> dict:
+    _init_schema()
+    inv = session.execute(
+        sql_text("SELECT * FROM investigations WHERE investigation_id = :id"), {"id": investigation_id}
+    ).fetchone()
+    if inv is None:
+        raise api_error("not_found", "investigation not found", 404)
+    rows = session.execute(
+        sql_text("SELECT * FROM investigation_files WHERE investigation_id = :iid ORDER BY created_at"),
+        {"iid": investigation_id},
+    ).fetchall()
+    items = []
+    for r in rows:
+        items.append(
+            {
+                "file_id": r.file_id,
+                "investigation_id": r.investigation_id,
+                "filename": r.filename,
+                "original_filename": r.original_filename,
+                "content_type": r.content_type,
+                "size_bytes": r.size_bytes,
+                "row_count": r.row_count,
+                "columns": json.loads(r.columns_json) if r.columns_json else [],
+                "created_at": r.created_at,
+            }
+        )
+    return ok({"items": items})
+
 @router.post("/investigations/{investigation_id}/files")
 def upload_file(investigation_id: str, file: UploadFile = File(...), session: Session = Depends(get_session)) -> dict:
     _init_schema()

@@ -56,5 +56,5 @@ def with_retries(call: Callable[[], str], *, provider: str) -> str:
                 time.sleep(delay)
                 last_error = exc
                 continue
-            raise LLMError(f"{provider}: network error — {type(exc).__name__}") from exc
+            raise LLMError(f"{provider}: retries exhausted") from last_error
     raise LLMError(f"{provider}: retries exhausted") from last_error

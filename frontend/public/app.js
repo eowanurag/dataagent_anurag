@@ -25,14 +25,73 @@ function formatBytes(n) {
 
 async function loadHealth() {
   const badge = $("provider-badge");
+  let provider = null;
+  let model = null;
   try {
     const res = await fetch("/health");
     const body = await res.json();
-    const { provider, model, key_configured: keyed } = body.data || {};
+    const { provider: p, model: m, key_configured: keyed } = body.data || {};
+    provider = p || null;
+    model = m || null;
     badge.textContent = keyed && provider && model ? `Backend ready · ${provider} · ${model}` : "Backend ready";
   } catch {
     badge.textContent = "Backend unreachable";
   }
+  await loadModelUsage(provider, model);
+}
+
+async function loadModelUsage(provider, model) {
+  const providerText = $("usage-provider");
+  const modelText = $("usage-model");
+  const lastIo = $("usage-last-io");
+  const todayIo = $("usage-today-io");
+  const contextRow = $("usage-context");
+  const datasetsRow = $("usage-datasets");
+  const costRow = $("usage-cost");
+  const modelSelect = $("model-select");
+  const providerSelect = $("provider-select");
+  const errorBox = $("model-error");
+
+  if (providerText) providerText.textContent = provider ? String(provider).toUpperCase() : "—";
+  if (modelText) modelText.textContent = model || "—";
+  if (lastIo) lastIo.textContent = "— / —";
+  if (todayIo) todayIo.textContent = "0 / 0 / 0";
+  if (contextRow) contextRow.textContent = "0 / 10,00,000";
+  if (datasetsRow) datasetsRow.textContent = "0 · 0";
+  if (costRow) costRow.textContent = "$0.00000";
+  if (modelSelect) modelSelect.innerHTML = "";
+  if (providerSelect) providerSelect.innerHTML = "";
+
+  try {
+    const settings = loadSettingsFromUI();
+    if (providerSelect && !providerSelect.value && provider) providerSelect.value = provider.toLowerCase();
+    if (modelSelect && !modelSelect.value && model) modelSelect.value = model;
+    if (providerSelect && !providerSelect.value) providerSelect.value = "openrouter";
+    if (modelSelect && !modelSelect.value) modelSelect.value = "meta/llama-3.1-70b-instruct";
+    if (providerText && provider) providerText.textContent = String(provider).toUpperCase();
+    if (modelText && model) modelText.textContent = model;
+  } catch {
+    if (errorBox) { errorBox.textContent = "Could not load settings."; errorBox.hidden = false; }
+  }
+}
+
+function loadSettingsFromUI() {
+  const providerSelect = $("provider-select");
+  const modelSelect = $("model-select");
+  return {
+    provider: providerSelect ? providerSelect.value : null,
+    model: modelSelect ? modelSelect.value : null,
+  };
+}
+
+async function applyModel() {
+  const errorBox = $("model-error");
+  errorBox.hidden = true;
+  const provider = ($("provider-select")?.value || "").trim();
+  const model = ($("model-select")?.value || "").trim();
+  if (!provider || !model) { if (errorBox) { errorBox.textContent = "Choose provider and model."; errorBox.hidden = false; } return; }
+  if (errorBox) { errorBox.textContent = "Model switching is UI-only in this build"; errorBox.hidden = false; }
+  await loadModelUsage();
 }
 
 async function createInvestigation() {
@@ -54,8 +113,8 @@ async function createInvestigation() {
     $("er-diagram").innerHTML = "";
     $("history").innerHTML = "";
     $("history-panel").innerHTML = "";
-    $("audit-list").innerHTML = "";
     $("audit-summary").textContent = "";
+    $("audit-list").innerHTML = "";
     knownFileIds.clear();
     selectedFileItems.length = 0;
     pendingFileItems.length = 0;
@@ -65,7 +124,6 @@ async function createInvestigation() {
     $("ask-btn").disabled = false;
     renderPendingFiles();
     loadAssets();
-    loadAuditLogs();
     loadHistory();
   } catch (err) {
     errBox.textContent = err.message;
@@ -80,26 +138,31 @@ async function uploadCsv() {
   const errBox = $("file-error");
   errBox.hidden = true;
   const input = $("panel-file-input");
-  const files = input.files && input.files.length ? input.files : [];
+  const files = input.files && input.files.length ? Array.from(input.files) : [];
   if (!files.length) { errBox.textContent = "Choose CSV files first."; errBox.hidden = false; return; }
-  selectedFileItems = Array.from(files).map((file) => ({ file }));
+  selectedFileItems = files.map((file) => ({ file }));
   renderPendingFiles();
   $("upload-btn").disabled = true;
   $("upload-btn").textContent = "Uploading…";
+  const items = [];
   try {
-    const form = new FormData();
-    for (const file of files) form.append("files", file, file.name);
-    const url = `/investigations/${encodeURIComponent(currentInvestigationId)}/files`;
-    const res = await fetch(url, { method: "POST", body: form });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.detail?.message || body?.detail || `HTTP ${res.status}`);
-    const items = Array.isArray(body.data?.items) ? body.data.items : [];
+    for (const file of files) {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const url = `/investigations/${encodeURIComponent(currentInvestigationId)}/files`;
+      const res = await fetch(url, { method: "POST", body: form });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.detail?.message || body?.detail || `HTTP ${res.status}`);
+      const uploaded = body.data || {};
+      items.push(uploaded);
+    }
     $("file-meta").textContent = `${items.length} file(s) uploaded`;
     input.value = "";
     selectedFileItems.length = 0;
     pendingFileItems.length = 0;
     renderPendingFiles();
     loadAssets();
+    loadModelUsage();
   } catch (err) {
     errBox.textContent = err.message;
     errBox.hidden = false;
@@ -140,8 +203,6 @@ function syncInputFromPending() {
   const dt = new DataTransfer();
   pendingFileItems.forEach((item) => dt.items.add(item.file));
   const fileList = dt.files;
-  const nativeSetter = Object.getOwnPropertyDescriptor(window.FileList, "0")?.set;
-  // Keep native input simple by re-creating a FileList-like array isn't supported; use current files for upload only
   const formData = new FormData();
   Array.from(fileList).forEach((file) => formData.append("files", file, file.name));
 }
@@ -212,7 +273,7 @@ async function askQuestion() {
     $("result-meta").textContent = `run ${data.run_id} · provider ${data.provider || ""} ${data.model || ""} · ${data.latency_ms || 0}ms`;
     $("result-wrap").hidden = false;
     loadHistory();
-    loadAuditLogs();
+    loadModelUsage();
   } catch (err) {
     errBox.textContent = err.message;
     errBox.hidden = false;
@@ -351,30 +412,6 @@ async function loadAssets() {
   }
 }
 
-async function loadAuditLogs() {
-  if (!currentInvestigationId) return;
-  try {
-    const res = await fetch(`/investigations/${encodeURIComponent(currentInvestigationId)}/audit`);
-    const body = await res.json();
-    if (!res.ok) return;
-    const summary = $("audit-summary");
-    const list = $("audit-list");
-    if (summary) summary.textContent = body.data?.summary || "Audit events loaded.";
-    if (list) {
-      list.innerHTML = "";
-      const items = Array.isArray(body.data?.items) ? body.data.items : [];
-      items.forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "audit-row";
-        row.innerHTML = `<div><strong>${escapeHtml(item.action || "event")}</strong> <span class="muted">${escapeHtml(item.timestamp || "")}</span></div><div class="audit-meta">${escapeHtml(item.error_message || JSON.stringify(item.payload || {}))}</div>`;
-        list.appendChild(row);
-      });
-    }
-  } catch {
-    // ignore
-  }
-}
-
 function appendMessage(role, content, citations, sql, latency, isHistory, followups) {
   if (isHistory) {
     const historyPanel = $("history-panel");
@@ -454,7 +491,7 @@ function appendMessage(role, content, citations, sql, latency, isHistory, follow
 document.addEventListener("DOMContentLoaded", () => {
   loadHealth();
   loadHistory();
-  loadAuditLogs();
+  loadModelUsage();
   wireDatasetRemoveButtons();
   const createBtn = $("create-btn");
   const uploadBtn = $("upload-btn");
@@ -462,6 +499,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (createBtn) createBtn.addEventListener("click", createInvestigation);
   if (uploadBtn) uploadBtn.addEventListener("click", uploadCsv);
   if (askBtn) askBtn.addEventListener("click", askQuestion);
+
+  const applyBtn = $("apply-model-btn");
+  if (applyBtn) applyBtn.addEventListener("click", applyModel);
 
   const assetsToggle = $("assets-toggle");
   const assetsBody = $("assets-body");

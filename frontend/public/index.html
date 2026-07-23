@@ -42,6 +42,61 @@
         <a class="nav-item" data-target="source-card" href="javascript:void(0);">
           <span class="nav-icon" aria-hidden="true">🔌</span> Live source
         </a>
+
+        <div class="nav-section">Model &amp; usage</div>
+        <details id="model-usage-panel" class="usage-panel" open>
+          <summary>Token usage</summary>
+          <div class="usage-block">
+            <div class="usage-row">
+              <dl>
+                <dt>Provider / mode</dt>
+                <dd id="usage-provider">—</dd>
+              </dl>
+            </div>
+            <div class="usage-row">
+              <dl>
+                <dt>Model</dt>
+                <dd id="usage-model">—</dd>
+              </dl>
+            </div>
+            <label class="muted" for="model-select">Switch model</label>
+            <select id="model-select" class="full"></select>
+            <label class="muted" for="provider-select">Provider</label>
+            <select id="provider-select" class="full"></select>
+            <button id="apply-model-btn" class="secondary sm apply-btn" type="button">Apply model</button>
+            <div class="usage-row">
+              <dl>
+                <dt>Last query In / Out</dt>
+                <dd id="usage-last-io">— / —</dd>
+              </dl>
+            </div>
+            <div class="usage-row">
+              <dl>
+                <dt>Today In / Out / Queries</dt>
+                <dd id="usage-today-io">0 / 0 / 0</dd>
+              </dl>
+            </div>
+            <div class="usage-row">
+              <dl>
+                <dt>Context window used / total</dt>
+                <dd id="usage-context">0 / 10,00,000</dd>
+              </dl>
+            </div>
+            <div class="usage-row">
+              <dl>
+                <dt>Datasets · Rows</dt>
+                <dd id="usage-datasets">0 · 0</dd>
+              </dl>
+            </div>
+            <div class="usage-row">
+              <dl>
+                <dt>Cost estimate</dt>
+                <dd id="usage-cost">$0.00000</dd>
+              </dl>
+            </div>
+            <div id="model-error" class="error" hidden></div>
+          </div>
+        </details>
       </nav>
 
       <main class="main split">

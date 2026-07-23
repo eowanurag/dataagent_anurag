@@ -1,7 +1,7 @@
 """AgentState — the TypedDict flowing through the graph."""
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class AgentState(TypedDict, total=False):
@@ -24,3 +24,4 @@ class AgentState(TypedDict, total=False):
     provider: str | None
     model: str | None
     input_text: str | None
+    usage: dict[str, Any] | None
