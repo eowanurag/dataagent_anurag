@@ -7,61 +7,191 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <h1>UP Police Data Analyst</h1>
-      <span id="provider-badge" class="badge" title="Active LLM provider">…</span>
+  <div class="app">
+    <header class="topnav">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <img src="/app/uppolice.png" alt="UP Police" />
+        </div>
+        <div class="brand-text">
+          <div class="title">UP Police</div>
+          <div class="subtitle">Data Analyst</div>
+        </div>
+      </div>
+      <div class="topnav-actions">
+        <span id="actor-badge" class="badge actor" title="Current operator">Operator: demo-user</span>
+        <span id="provider-badge" class="badge" title="Active LLM provider">Backend ready</span>
+        <a class="docs-link" href="/docs" target="_blank" rel="noopener">API</a>
+      </div>
     </header>
 
-    <section class="card" id="investigation-card">
-      <h2>Investigation</h2>
-      <div class="row">
-        <div class="field">
-          <label for="title">Title</label>
-          <input id="title" type="text" value="District quarter analysis" />
+    <div class="layout">
+      <nav class="sidebar">
+        <a class="nav-item active" data-target="analysis-card" href="javascript:void(0);">
+          <span class="nav-icon" aria-hidden="true">🗂️</span> Analysis file
+        </a>
+        <a class="nav-item" data-target="chat-card" href="javascript:void(0);">
+          <span class="nav-icon" aria-hidden="true">🔎</span> Ask
+        </a>
+        <a class="nav-item" data-target="history-card" href="javascript:void(0);">
+          <span class="nav-icon" aria-hidden="true">🕒</span> History
+        </a>
+        <a class="nav-item" data-target="audit-card" href="javascript:void(0);">
+          <span class="nav-icon" aria-hidden="true">📋</span> Audit
+        </a>
+        <a class="nav-item" data-target="source-card" href="javascript:void(0);">
+          <span class="nav-icon" aria-hidden="true">🔌</span> Live source
+        </a>
+      </nav>
+
+      <main class="main split">
+        <div class="stack">
+          <section class="card" id="analysis-card">
+            <h2>New data analysis file</h2>
+            <div class="row">
+              <div class="field">
+                <label for="title">File name</label>
+                <input id="title" type="text" value="District quarter analysis" />
+              </div>
+              <div class="actions">
+                <button id="create-btn">Create new file</button>
+                <span id="inv-id" class="muted"></span>
+              </div>
+            </div>
+            <div class="export-row">
+              <button id="export-csv-btn" class="secondary" disabled>Export CSV</button>
+              <button id="export-pdf-btn" class="secondary" disabled>Export PDF</button>
+              <span id="export-status" class="status" hidden></span>
+            </div>
+            <p class="hint">Start by naming your analysis file.</p>
+            <div id="inv-error" class="error" hidden></div>
+          </section>
+
+          <section class="card" id="chat-card">
+            <h2>Ask a question</h2>
+            <div id="history" class="history"></div>
+
+            <label for="question">Question</label>
+            <div class="ask-row">
+              <select id="source-select">
+                <option value="csv">CSV</option>
+                <option value="mssql">Live DB</option>
+              </select>
+              <input id="question" type="text" placeholder="Which district has the highest count?" />
+              <button id="ask-btn" disabled>Ask</button>
+              <span id="status" class="status" hidden></span>
+            </div>
+            <div id="error" class="error" hidden></div>
+
+            <div id="result-wrap" hidden>
+              <h3>Answer</h3>
+              <pre id="answer"></pre>
+              <div id="chart-wrap" class="chart-wrap"></div>
+              <div id="citations" class="citations"></div>
+              <div id="followups" class="followups"></div>
+              <p class="meta" id="result-meta"></p>
+            </div>
+          </section>
+
+          <section class="card" id="history-card">
+            <h2>History</h2>
+            <div id="history-panel" class="history"></div>
+          </section>
+
+          <section class="card" id="audit-card">
+            <h2>Audit log</h2>
+            <div id="audit-summary" class="muted">No audit events yet.</div>
+            <div id="audit-list" class="audit-list"></div>
+          </section>
+
+          <section class="card" id="source-card">
+            <h2>Live source</h2>
+            <div class="row">
+              <div class="field">
+                <label for="source-status">Active connection</label>
+                <div id="source-status" class="muted">Loading…</div>
+              </div>
+              <div class="actions">
+                <button id="refresh-source-btn" class="secondary">Refresh</button>
+              </div>
+            </div>
+            <div id="source-details" class="muted"></div>
+            <div id="source-error" class="error" hidden></div>
+          </section>
         </div>
-        <div class="actions">
-          <button id="create-btn">Create investigation</button>
-          <span id="inv-id" class="muted"></span>
-        </div>
-      </div>
 
-      <p class="hint">Create an investigation first, then upload CSV files.</p>
-      <div id="inv-error" class="error" hidden></div>
-    </section>
+        <aside class="panels">
+          <section class="card" id="files-panel">
+            <div class="panel-header">
+              <h2>Files</h2>
+              <button id="files-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="files-body">▾</button>
+            </div>
+            <div id="files-body" class="panel-body">
+              <label class="uploader" for="panel-file-input">
+                <input id="panel-file-input" type="file" accept=".csv" multiple />
+                <span class="uploader-body">
+                  <span class="uploader-icon" aria-hidden="true">⬆️</span>
+                  <span>Click to select or drop CSVs</span>
+                </span>
+              </label>
+              <button id="upload-btn" class="secondary" disabled>Upload CSV</button>
+              <div id="file-meta" class="muted"></div>
+              <div id="pending-files-list" class="pending-list"></div>
+              <div id="files-list" class="files-list"></div>
+              <div id="file-error" class="error" hidden></div>
+            </div>
+          </section>
 
-    <section class="card" id="files-card">
-      <h2>Files</h2>
-      <input id="file-input" type="file" accept=".csv" />
-      <button id="upload-btn" disabled>Upload CSV</button>
-      <div id="file-meta" class="muted"></div>
-      <div id="file-error" class="error" hidden></div>
-    </section>
+          <section class="card" id="assets-panel">
+            <div class="panel-header">
+              <h2>Data assets</h2>
+              <div class="panel-actions">
+                <button id="assets-maximize" class="icon-btn" type="button" aria-label="Maximize Data assets" title="Maximize">⛶</button>
+                <button id="assets-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="assets-body">▾</button>
+              </div>
+            </div>
+            <div id="assets-body" class="panel-body">
+              <div id="er-summary" class="muted">Upload CSVs to see schema, samples, and relationships.</div>
+              <div id="datasets" class="datasets"></div>
+              <div id="er-diagram" class="er-diagram">
+                <div id="er-resize-handle" class="er-resize-handle" title="Drag to adjust ER diagram"></div>
+              </div>
+            </div>
+          </section>
 
-    <section class="card" id="chat-card">
-      <h2>Ask a question</h2>
-      <div id="history" class="history"></div>
-
-      <label for="question">Question</label>
-      <input id="question" type="text" placeholder="Which district has the highest count?" />
-      <button id="ask-btn" disabled>Ask</button>
-      <div id="status" class="status" hidden></div>
-      <div id="error" class="error" hidden></div>
-
-      <div id="result-wrap" hidden>
-        <h3>Answer</h3>
-        <pre id="answer"></pre>
-        <div id="chart-wrap" class="chart-wrap"></div>
-        <div id="citations" class="citations"></div>
-        <div id="followups" class="followups"></div>
-        <p class="meta" id="result-meta"></p>
-      </div>
-    </section>
+          <div id="assets-overlay" class="assets-overlay" hidden>
+            <div class="assets-overlay-card">
+              <div class="panel-header">
+                <h2>Data assets</h2>
+                <div class="panel-actions">
+                  <button id="assets-minimize" class="icon-btn" type="button" aria-label="Restore Data assets" title="Restore">🗗</button>
+                </div>
+              </div>
+              <div id="assets-overlay-body" class="panel-body"></div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
 
     <footer class="foot">
-      <span>API docs at <a href="/docs">/docs</a> · health at <a href="/health">/health</a></span>
+      <div class="footer-inner">
+        <div>
+          <strong>About</strong>
+          <p>UP Police Data Analyst — investigative analysis assistant. Use this tool to upload datasets, run traced analysis, and review audit records.</p>
+        </div>
+        <div class="footer-meta">
+          <span>Phase 1 · on-premises</span>
+          <span>Audit trail enabled</span>
+          <span>v0.1.0</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>API docs at <a href="/docs" target="_blank" rel="noopener">/docs</a> · health at <a href="/health">/health</a></span>
+      </div>
     </footer>
-  </main>
+  </div>
+  <script src="/app/mermaid.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
