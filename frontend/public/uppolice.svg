@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 360" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f6d478"/>
+      <stop offset="0.5" stop-color="#c6921b"/>
+      <stop offset="1" stop-color="#8c6118"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- badge background -->
+  <rect width="260" height="180" rx="20" fill="#0b1c3f"/>
+  <rect x="4" y="4" width="252" height="172" rx="17" fill="#0f2644"/>
+
+  <!-- main red circle -->
+  <circle cx="130" cy="96" r="54" fill="#9f1239"/>
+
+  <!-- wheat wreath -->
+  <g stroke="url(#gold)" stroke-width="2.2" opacity="0.95">
+    <path d="M92 94c-14-8-26-4-30 10-2 8 2 18 12 22" stroke-linecap="round"/>
+    <path d="M168 94c14-8 26-4 30 10 2 8-2 18-12 22" stroke-linecap="round"/>
+    <path d="M92 94v14M94 98v14M96 102v14M98 106v14M100 110v12M102 114v10"/>
+    <path d="M168 94v14M166 98v14M164 102v14M162 106v14M160 110v12M158 114v10"/>
+  </g>
+
+  <!-- central fish -->
+  <g transform="translate(130,101)" stroke="url(#gold)" stroke-width="2.4">
+    <path d="M-20 -8c2-4 12-14 20-14 8 0 18 10 20 14 2 4-12 14-20 14-8 0-18-10-20-14z" fill="#e4aa2d"/>
+    <path d="M-20 -8c2-4 12-14 20-14 8 0 18 10 20 14 2 4-12 14-20 14-8 0-18-10-20-14z" fill="none"/>
+    <circle cx="6" cy="-2" r="1.5" fill="#2a0a1a"/>
+  </g>
+
+  <g transform="translate(130,101) scale(-1,1)" stroke="url(#gold)" stroke-width="2.4">
+    <path d="M-20 -8c2-4 12-14 20-14 8 0 18 10 20 14 2 4-12 14-20 14-8 0-18-10-20-14z" fill="#e4aa2d"/>
+    <path d="M-20 -8c2-4 12-14 20-14 8 0 18 10 20 14 2 4-12 14-20 14-8 0-18-10-20-14z" fill="none"/>
+    <circle cx="6" cy="-2" r="1.5" fill="#2a0a1a"/>
+  </g>
+
+  <!-- lower banner band -->
+  <path d="M60 144h140c4 0 8 2.5 8 6.5v14c0 4-4 6.5-8 6.5H60c-4 0-8-2.5-8-6.5v-14c0-4 4-6.5 8-6.5z" fill="#0b1c3f"/>
+  <path d="M72 164h116" stroke="#fbbf24" stroke-width="1.6" opacity="0.8"/>
+
+  <!-- text -->
+  <text x="130" y="163" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,sans-serif" font-weight="700" font-size="14" fill="#fbbf24" letter-spacing="0.6">Uttar Pradesh Police</text>
+
+  <!-- brand right side -->
+  <text x="260" y="154" text-anchor="end" font-family="Inter,Segoe UI,Roboto,sans-serif" font-weight="700" font-size="18" fill="#ffffff">UP POLICE</text>
+  <text x="260" y="170" text-anchor="end" font-family="Inter,Segoe UI,Roboto,sans-serif" font-weight="600" font-size="10.5" fill="#fbbf24" letter-spacing="0.8">DATA ANALYST</text>
+</svg>
