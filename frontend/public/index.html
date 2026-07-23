@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UP Police — Data Analyst</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=60c18ac" />
 </head>
 <body>
   <div class="app">
@@ -119,59 +119,59 @@
             <div id="source-error" class="error" hidden></div>
           </section>
         </div>
+      </main>
 
-        <aside class="panels">
-          <section class="card" id="files-panel">
-            <div class="panel-header">
-              <h2>Files</h2>
-              <button id="files-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="files-body">▾</button>
-            </div>
-            <div id="files-body" class="panel-body">
-              <label class="uploader" for="panel-file-input">
-                <input id="panel-file-input" type="file" accept=".csv" multiple />
-                <span class="uploader-body">
-                  <span class="uploader-icon" aria-hidden="true">⬆️</span>
-                  <span>Click to select or drop CSVs</span>
-                </span>
-              </label>
-              <button id="upload-btn" class="secondary" disabled>Upload CSV</button>
-              <div id="file-meta" class="muted"></div>
-              <div id="pending-files-list" class="pending-list"></div>
-              <div id="files-list" class="files-list"></div>
-              <div id="file-error" class="error" hidden></div>
-            </div>
-          </section>
+      <aside class="panels">
+        <section class="card" id="files-panel">
+          <div class="panel-header">
+            <h2>Files</h2>
+            <button id="files-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="files-body">▾</button>
+          </div>
+          <div id="files-body" class="panel-body">
+            <label class="uploader" for="panel-file-input">
+              <input id="panel-file-input" type="file" accept=".csv" multiple />
+              <span class="uploader-body">
+                <span class="uploader-icon" aria-hidden="true">⬆️</span>
+                <span>Click to select or drop CSVs</span>
+              </span>
+            </label>
+            <button id="upload-btn" class="secondary" disabled>Upload CSV</button>
+            <div id="file-meta" class="muted"></div>
+            <div id="pending-files-list" class="pending-list"></div>
+            <div id="files-list" class="files-list"></div>
+            <div id="file-error" class="error" hidden></div>
+          </div>
+        </section>
 
-          <section class="card" id="assets-panel">
+        <section class="card" id="assets-panel">
+          <div class="panel-header">
+            <h2>Data assets</h2>
+            <div class="panel-actions">
+              <button id="assets-maximize" class="icon-btn" type="button" aria-label="Maximize Data assets" title="Maximize">⛶</button>
+              <button id="assets-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="assets-body">▾</button>
+            </div>
+          </div>
+          <div id="assets-body" class="panel-body">
+            <div id="er-summary" class="muted">Upload CSVs to see schema, samples, and relationships.</div>
+            <div id="datasets" class="datasets"></div>
+            <div id="er-diagram" class="er-diagram">
+              <div id="er-resize-handle" class="er-resize-handle" title="Drag to adjust ER diagram"></div>
+            </div>
+          </div>
+        </section>
+
+        <div id="assets-overlay" class="assets-overlay" hidden>
+          <div class="assets-overlay-card">
             <div class="panel-header">
               <h2>Data assets</h2>
               <div class="panel-actions">
-                <button id="assets-maximize" class="icon-btn" type="button" aria-label="Maximize Data assets" title="Maximize">⛶</button>
-                <button id="assets-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="assets-body">▾</button>
+                <button id="assets-minimize" class="icon-btn" type="button" aria-label="Restore Data assets" title="Restore">🗗</button>
               </div>
             </div>
-            <div id="assets-body" class="panel-body">
-              <div id="er-summary" class="muted">Upload CSVs to see schema, samples, and relationships.</div>
-              <div id="datasets" class="datasets"></div>
-              <div id="er-diagram" class="er-diagram">
-                <div id="er-resize-handle" class="er-resize-handle" title="Drag to adjust ER diagram"></div>
-              </div>
-            </div>
-          </section>
-
-          <div id="assets-overlay" class="assets-overlay" hidden>
-            <div class="assets-overlay-card">
-              <div class="panel-header">
-                <h2>Data assets</h2>
-                <div class="panel-actions">
-                  <button id="assets-minimize" class="icon-btn" type="button" aria-label="Restore Data assets" title="Restore">🗗</button>
-                </div>
-              </div>
-              <div id="assets-overlay-body" class="panel-body"></div>
-            </div>
+            <div id="assets-overlay-body" class="panel-body"></div>
           </div>
-        </aside>
-      </main>
+        </div>
+      </aside>
     </div>
 
     <footer class="foot">
@@ -192,6 +192,6 @@
     </footer>
   </div>
   <script src="/app/mermaid.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=60c18ac"></script>
 </body>
 </html>
