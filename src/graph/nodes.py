@@ -15,7 +15,7 @@ from src.llm.providers.base import LLMError
 from src.observability.events import get_logger, log_span
 from src.services.audit import record_audit
 from src.services.storage import read_attachment
-from src.tools.csv_tool import CsvQueryError, inspect_schema, query_sql
+from src.tools.csv_tool import CsvQueryError, _resolve_table_name, inspect_schema, query_sql
 
 log = get_logger("graph")
 
@@ -88,7 +88,8 @@ def plan(state: AgentState) -> AgentState:
             if not file_id:
                 return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "plan"}
             schema = inspect_schema(file_id)
-            schema_summary = f"columns={schema['columns']}, row_count={schema['row_count']}"
+            table_name = _resolve_table_name(file_id)
+            schema_summary = f"table={table_name}, columns={schema['columns']}, row_count={schema['row_count']}"
             files_context = "uploaded CSV"
     except Exception as exc:  # noqa: BLE001
         return {"error": f"schema lookup failed: {exc}", "status": "failed", "checkpoint": "plan"}
@@ -123,7 +124,8 @@ def generate_sql(state: AgentState) -> AgentState:
             if not file_id:
                 return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "generate_sql"}
             schema = inspect_schema(file_id)
-            schema_summary = ", ".join(schema["columns"])
+            table_name = _resolve_table_name(file_id)
+            schema_summary = f"table={table_name}, columns={', '.join(schema['columns'])}"
     except Exception as exc:  # noqa: BLE001
         return {"error": f"schema lookup failed: {exc}", "status": "failed", "checkpoint": "generate_sql"}
 
@@ -201,11 +203,12 @@ def execute_query(state: AgentState) -> AgentState:
 
 def synthesize_answer(state: AgentState) -> AgentState:
     question = state.get("question") or ""
-    sql = state.get("sql") or ""
+    sql = (state.get("sql") or "").strip()
     sql_rows = state.get("sql_rows") or []
     sql_row_count = state.get("sql_row_count") or 0
     source = state.get("source") or "csv"
 
+    chart_spec = _build_chart_spec(sql_rows)
     sample_rows = sql_rows[:50]
     system = load_prompt("synthesize")
     user = (
@@ -214,6 +217,7 @@ def synthesize_answer(state: AgentState) -> AgentState:
         f"Row count returned: {sql_row_count}\n"
         f"Row count available: {sql_row_count}\n"
         f"Rows sample (JSON array, first {len(sample_rows)} rows): {json.dumps(sample_rows)}\n"
+        f"Chart type: {chart_spec.get('type')}"
     )
     try:
         answer_text = _complete("synthesize_answer", system, user, max_tokens=1024)
@@ -222,20 +226,73 @@ def synthesize_answer(state: AgentState) -> AgentState:
 
     citations = [f"{source}: {sql}"] if sql else ([f"{source}: data"] if source else [])
     followups = [
-        "Show top-ranked results with a limit",
-        "Filter by a specific column value",
-        "Group and aggregate the result",
+        "Show a chart view of these results",
+        "Filter these results by a specific value",
+        "Show the top/bottom ranked rows",
     ]
-    chart_spec = {"type": "table", "data": sample_rows}
 
     return {
         "answer_text": answer_text,
         "citations": citations,
         "followup_suggestions": followups,
         "chart_spec": chart_spec,
+        "chart_type": chart_spec.get("type"),
+        "chart_x": chart_spec.get("x"),
+        "chart_y": chart_spec.get("y"),
         "status": "completed",
         "checkpoint": "synthesize_answer",
     }
+
+
+def _build_chart_spec(rows: list[dict]) -> dict[str, Any]:
+    if not rows:
+        return {"type": "empty", "data": []}
+    numeric_keys = _infer_numeric_keys(rows)
+    string_keys = _infer_string_keys(rows)
+    chart_type = "table"
+    x = string_keys[0] if string_keys else (list(rows[0].keys())[0] if rows[0] else None)
+    y = numeric_keys[0] if numeric_keys else None
+    if len(rows) <= 20 and x and y:
+        chart_type = "bar"
+    if chart_type == "table" and len(rows) > 0:
+        return {"type": "table", "data": rows[:250], "columns": list(rows[0].keys())}
+    return {
+        "type": chart_type,
+        "data": rows[:250],
+        "x": x,
+        "y": y,
+        "columns": list(rows[0].keys()) if rows else [],
+    }
+
+
+def _infer_numeric_keys(rows: list[dict]) -> list[str]:
+    if not rows:
+        return []
+    candidates = list(rows[0].keys())
+    out: list[str] = []
+    for key in candidates:
+        values = [r.get(key) for r in rows[:200]]
+        numeric_count = sum(_is_number(v) for v in values if v is not None)
+        ratio = numeric_count / max(len(values), 1)
+        if ratio >= 0.85:
+            out.append(key)
+    return out
+
+
+def _infer_string_keys(rows: list[dict]) -> list[str]:
+    if not rows:
+        return []
+    numeric_keys = _infer_numeric_keys(rows)
+    candidates = list(rows[0].keys())
+    return [key for key in candidates if key.lower() not in {"id", "row_id", "index"} and key not in numeric_keys][:5]
+
+
+def _is_number(value: Any) -> bool:
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str) and value.strip().replace(".", "", 1).replace("-", "", 1).isdigit():
+        return True
+    return False
 
 
 def handle_error(state: AgentState) -> AgentState:

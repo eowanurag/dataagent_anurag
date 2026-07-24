@@ -97,10 +97,23 @@ question-first interface with complete audit trail and live-DB minimisation buil
   - Reopen a saved investigation; ask a follow-up; chart updates; export CSV + PDF from UI;
   audit log shows both export events.
 
-### Phase 3 — Live MsSQL Integration
+### Phase 4 — Multi-Model + Auto Charts
+
+- **Goal:** Enable real multi-model selection and automatic chart output from query results.
+- **Independent slices (parallel build units):**
+  - `slice-a` (backend) — model registry + `/models` endpoint + candidate model metadata; deps: Phase 1
+  - `slice-b` (backend) — explore-phase execution across candidate models with winner selection + audit metadata; deps: Phase 1
+  - `slice-c` (backend + frontend) — structured `chart_spec` generation and canvas chart renderer; deps: Phase 1
+- **Key surfaces / files:** `src/llm/registry.py`, `src/api/models.py`, `src/api/charts.py`, `src/graph/explore.py`, `frontend/public/app.js`, `tests/unit/test_models.py`, `tests/unit/test_graph_charts.py`
+- **Gate command:** `uv run pytest tests/unit -q`
+- **How the user tests it:**
+  - Open `/app`; confirm the left-panel model dropdown is populated from `/models`
+  - Upload CSV, ask a question, and confirm the answer includes a rendered chart when results support it
+
+### Phase 5 — Live MsSQL Integration
 
 - **Goal:** Add a live MsSQL analytical source as a queryable data source with protections:
-  read-only role, explicit allow-list / schema introspection, row budget, and audit capture.
+- **Independent slices (parallel build units):**
 - **Independent slices (parallel build units):**
   - `slice-a` (backend) — read-only MsSQL driver integration, schema introspection, SQL
     sanitisation layer, query budget + safety checks; deps: Phase 2
@@ -113,6 +126,6 @@ question-first interface with complete audit trail and live-DB minimisation buil
 - **Gate command:** `uv run pytest tests -q`
 - **How the user tests it:**
   - Add MsSQL connection string in `.env`; approve schema; ask "Compare FIR counts by
-  district for last quarter"; expect answer + row-count filter + audit log entry with SQL.
+    district for last quarter"; expect answer + row-count filter + audit log entry with SQL.
   Confirm no DDML passes sanitisation.
 

@@ -26,3 +26,6 @@ class AgentState(TypedDict, total=False):
     model: str | None
     input_text: str | None
     usage: dict[str, Any] | None
+    chart_type: str | None
+    chart_x: str | None
+    chart_y: str | None

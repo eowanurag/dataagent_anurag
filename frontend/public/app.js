@@ -62,17 +62,55 @@ async function loadModelUsage(provider, model) {
   if (modelSelect) modelSelect.innerHTML = "";
   if (providerSelect) providerSelect.innerHTML = "";
 
+  let registry = null;
   try {
-    const settings = loadSettingsFromUI();
-    if (providerSelect && !providerSelect.value && provider) providerSelect.value = provider.toLowerCase();
-    if (modelSelect && !modelSelect.value && model) modelSelect.value = model;
-    if (providerSelect && !providerSelect.value) providerSelect.value = "openrouter";
-    if (modelSelect && !modelSelect.value) modelSelect.value = "meta/llama-3.1-70b-instruct";
-    if (providerText && provider) providerText.textContent = String(provider).toUpperCase();
-    if (modelText && model) modelText.textContent = model;
+    const res = await fetch('/models');
+    if (res.ok) {
+      registry = await res.json();
+    }
   } catch {
-    if (errorBox) { errorBox.textContent = "Could not load settings."; errorBox.hidden = false; }
+    registry = null;
   }
+
+  const seenProviders = new Map();
+
+  if (registry?.models?.length && providerSelect && modelSelect) {
+    for (const m of registry.models) {
+      if (!seenProviders.has(m.provider)) {
+        const opt = document.createElement('option');
+        opt.value = m.provider;
+        opt.textContent = m.provider;
+        if (provider && m.provider === provider) opt.selected = true;
+        if (!provider && m.provider === 'openrouter') opt.selected = true;
+        providerSelect.appendChild(opt);
+        seenProviders.set(m.provider, true);
+      }
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = `${m.label} (${m.provider})`;
+      if (model && m.id === model) opt.selected = true;
+      if (!model && m.default) opt.selected = true;
+      modelSelect.appendChild(opt);
+    }
+  } else {
+    if (providerSelect) {
+      const opt = document.createElement('option');
+      opt.value = 'openrouter';
+      opt.textContent = 'openrouter';
+      providerSelect.appendChild(opt);
+    }
+    if (modelSelect) {
+      const opt = document.createElement('option');
+      opt.value = 'meta-llama/llama-3.1-70b-instruct';
+      opt.textContent = 'Llama 3.1 70B Instruct';
+      modelSelect.appendChild(opt);
+    }
+  }
+
+  const chosenProvider = (providerSelect?.value || provider || "openrouter").trim();
+  const chosenModel = (modelSelect?.value || model || "meta-llama/llama-3.1-70b-instruct").trim();
+  if (providerText) providerText.textContent = chosenProvider || "—";
+  if (modelText) modelText.textContent = chosenModel || "—";
 }
 
 function loadSettingsFromUI() {
@@ -90,8 +128,8 @@ async function applyModel() {
   const provider = ($("provider-select")?.value || "").trim();
   const model = ($("model-select")?.value || "").trim();
   if (!provider || !model) { if (errorBox) { errorBox.textContent = "Choose provider and model."; errorBox.hidden = false; } return; }
-  if (errorBox) { errorBox.textContent = "Model switching is UI-only in this build"; errorBox.hidden = false; }
-  await loadModelUsage();
+  await loadModelUsage(provider, model);
+  if (errorBox) { errorBox.textContent = "Model selection saved for this session."; errorBox.hidden = false; }
 }
 
 async function createInvestigation() {
@@ -207,6 +245,198 @@ function syncInputFromPending() {
   Array.from(fileList).forEach((file) => formData.append("files", file, file.name));
 }
 
+function renderChart(spec, container) {
+  if (!container || !spec || !spec.type || spec.type === "empty") {
+    if (container) container.innerHTML = '<div class="muted">No data to chart.</div>';
+    return;
+  }
+
+  if (spec.type === "table") {
+    container.innerHTML = "";
+    if (!Array.isArray(spec.data) || !spec.data.length) {
+      container.innerHTML = '<div class="muted">No data to chart.</div>';
+      return;
+    }
+    const table = document.createElement("table");
+    table.className = "result-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    Object.keys(spec.data[0]).forEach((col) => {
+      const th = document.createElement("th");
+      th.textContent = col;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    spec.data.slice(0, 250).forEach((row) => {
+      const tr = document.createElement("tr");
+      Object.values(row).forEach((val) => {
+        const td = document.createElement("td");
+        td.textContent = val == null ? "" : String(val);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    return;
+  }
+
+  if (!Array.isArray(spec.data) || !spec.data.length) {
+    container.innerHTML = '<div class="muted">No data to chart.</div>';
+    return;
+  }
+
+  const isNumeric = (value) => {
+    if (typeof value === "number") return true;
+    if (typeof value === "string" && value.trim().replace(".", "", 1).replace("-", "", 1).trim() !== "") {
+      return !Number.isNaN(Number(value));
+    }
+    return false;
+  };
+
+  const keys = Object.keys(spec.data[0]);
+  const xKey = spec.x || keys[0];
+  const yKey = spec.y || keys.find((key) => isNumeric(spec.data[0][key])) || keys[1];
+
+  const stepCount = (spec.type === "pie" ? 16 : 26);
+  const maxLabel = (spec.type === "pie" ? 12 : 18);
+  const dataSet = spec.data.slice(0, stepCount);
+  const labels = dataSet.map((item) => String(item[xKey] ?? "").slice(0, maxLabel));
+  const values = dataSet.map((item) => {
+    const raw = Number(item[yKey]);
+    return Number.isFinite(raw) ? raw : 0;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.style.width = "100%";
+  canvas.style.maxWidth = "720px";
+  canvas.style.height = "360px";
+  container.innerHTML = "";
+  container.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(rect.width, 320) * dpr;
+  canvas.height = 360 * dpr;
+  ctx.scale(dpr, dpr);
+  const width = rect.width || 720;
+  const height = 360;
+  const padding = { top: 24, right: 24, bottom: 60, left: 64 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--chart-fill").trim() || "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  const maxValue = Math.max(...values, 1);
+  const minimumNonZero = values.filter((value) => value > 0).sort((a, b) => a - b)[0] || 0;
+
+  const contextRow = $("usage-context");
+  if (contextRow) contextRow.textContent = `${spec.type} | x=${xKey}, y=${yKey}`;
+
+  if (spec.type === "line") {
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 2;
+    const xUnit = chartWidth / Math.max(labels.length - 1, 1);
+    const yUnit = chartHeight / maxValue;
+    ctx.beginPath();
+    labels.forEach((label, index) => {
+      const x = padding.left + index * xUnit;
+      const y = padding.top + chartHeight - values[index] * yUnit;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    labels.forEach((label, index) => {
+      const x = padding.left + index * xUnit;
+      const y = padding.top + chartHeight - values[index] * yUnit;
+      if (values[index] === minimumNonZero) {
+        ctx.fillStyle = "#dc2626";
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px ui-monospace,monospace";
+      ctx.save();
+      ctx.translate(x, padding.top + chartHeight + 16);
+      ctx.rotate(Math.PI / (labels.length > 12 ? 4 : 6));
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    });
+    return;
+  }
+
+  if (spec.type === "pie") {
+    const total = values.reduce((sum, value) => sum + value, 0) || 1;
+    let angle = -Math.PI / 2;
+    const palette = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#9333ea", "#0891b2", "#db2777", "#475569"];
+    values.forEach((value, index) => {
+      const slice = (value / total) * 2 * Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(width / 2, height / 2);
+      ctx.arc(width / 2, height / 2, Math.min(chartWidth, chartHeight) / 2 - 12, angle, angle + slice);
+      ctx.fillStyle = palette[index % palette.length];
+      ctx.fill();
+      if (slice > 0.08) {
+        const mid = angle + slice / 2;
+        const labelRadius = (Math.min(chartWidth, chartHeight) / 2 - 36) / 2 + 12;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "12px ui-monospace,monospace";
+        ctx.save();
+        ctx.translate(width / 2 + Math.cos(mid) * labelRadius, height / 2 + Math.sin(mid) * labelRadius);
+        ctx.rotate(mid + Math.PI / 2);
+        ctx.fillText(labels[index], 0, 0);
+        ctx.restore();
+      }
+      angle += slice;
+    });
+    canvas.style.height = "320px";
+    return;
+  }
+
+  const barCount = values.length;
+  const gap = 8;
+  const barWidth = Math.max((chartWidth - gap * (barCount + 1)) / barCount, 4);
+  const startX = padding.left + gap + barWidth / 2;
+  const yUnit = chartHeight / maxValue;
+
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top);
+  ctx.lineTo(padding.left, padding.top + chartHeight);
+  ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+  ctx.stroke();
+
+  if (spec.type === "bar") {
+    values.forEach((value, index) => {
+      const barHeight = value * yUnit;
+      const x = startX + index * (barWidth + gap);
+      const y = padding.top + chartHeight - barHeight;
+      ctx.fillStyle = index === 0 ? "#2563eb" : "#60a5fa";
+      ctx.fillRect(x - barWidth / 2, y, barWidth, barHeight);
+      if (value === minimumNonZero) {
+        ctx.fillStyle = "#dc2626";
+        ctx.fillRect(x - barWidth / 2, y, barWidth, Math.max(barHeight, 8));
+      }
+      ctx.fillStyle = "#334155";
+      ctx.font = "11px ui-monospace,monospace";
+      ctx.save();
+      ctx.translate(x, padding.top + chartHeight + 12);
+      ctx.rotate(Math.PI / (barCount > 10 ? 5 : 7));
+      ctx.fillText(labels[index], 0, 0);
+      ctx.restore();
+    });
+    return;
+  }
+
+  container.innerHTML = '<div class="muted">Chart type not supported yet.</div>';
+}
+
 async function askQuestion() {
   const errBox = $("error");
   const status = $("status");
@@ -248,22 +478,29 @@ async function askQuestion() {
       $("followups").appendChild(ul);
     }
     $("chart-wrap").innerHTML = "";
-    if (data.chart_spec && data.chart_spec.type === "table" && Array.isArray(data.chart_spec.data)) {
-      const table = document.createElement("table");
-      table.className = "result-table";
-      const thead = document.createElement("thead");
-      const headRow = document.createElement("tr");
-      Object.keys(data.chart_spec.data[0] || {}).forEach((col) => { const th = document.createElement("th"); th.textContent = col; headRow.appendChild(th); });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-      const tbody = document.createElement("tbody");
-      data.chart_spec.data.slice(0, 250).forEach((row) => {
-        const tr = document.createElement("tr");
-        Object.values(row).forEach((val) => { const td = document.createElement("td"); td.textContent = val == null ? "" : String(val); tr.appendChild(td); });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      $("chart-wrap").appendChild(table);
+    let chartRendered = false;
+    if (data.chart_spec && Array.isArray(data.chart_spec.data)) {
+      if (data.chart_spec.type === "table") {
+        const table = document.createElement("table");
+        table.className = "result-table";
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        Object.keys(data.chart_spec.data[0] || {}).forEach((col) => { const th = document.createElement("th"); th.textContent = col; headRow.appendChild(th); });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        const tbody = document.createElement("tbody");
+        data.chart_spec.data.slice(0, 250).forEach((row) => {
+          const tr = document.createElement("tr");
+          Object.values(row).forEach((val) => { const td = document.createElement("td"); td.textContent = val == null ? "" : String(val); tr.appendChild(td); });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        $("chart-wrap").appendChild(table);
+        chartRendered = true;
+      }
+    }
+    if (!chartRendered && data.chart_spec) {
+      renderChart(data.chart_spec, $("chart-wrap"));
     }
     $("citations").innerHTML = "";
     const citeItems = data.citations || [];

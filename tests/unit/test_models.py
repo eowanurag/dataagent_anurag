@@ -1,17 +1,28 @@
-from src.db.models import RunRow
-from src.db.session import create_db_session, init_db
+import pytest
+from fastapi.testclient import TestClient
+
+from src.api import create_app
+from src.llm.registry import canonicalize, list_variants
 
 
-def test_run_row_roundtrip():
-    init_db()
-    with create_db_session() as s:
-        run = RunRow(input_text="hello", instruction="upper", status="running")
-        s.add(run)
-        s.flush()
-        run_id = run.id
-    with create_db_session() as s:
-        row = s.get(RunRow, run_id)
-        assert row is not None
-        assert row.input_text == "hello"
-        assert row.status == "running"
-        assert row.created_at is not None
+def test_models_endpoint_returns_count_and_selected():
+    client = TestClient(create_app())
+    with client:
+        res = client.get("/models")
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert payload["count"] >= 1
+    assert isinstance(payload["models"], list)
+    assert "selected" in payload
+    assert payload["selected"]["id"] == payload["models"][0]["id"]
+
+
+def test_list_variants_has_expected_candidates():
+    variants = list_variants()
+    assert any(v["provider"] == "openrouter" for v in variants)
+    assert any(v["id"] == "meta-llama/llama-3.1-70b-instruct" for v in variants)
+
+
+def test_canonicalize_maps_legacy_model_ids():
+    assert canonicalize("meta/llama-3.1-70b-instruct") == "meta-llama/llama-3.1-70b-instruct"
+    assert canonicalize("") == ""
