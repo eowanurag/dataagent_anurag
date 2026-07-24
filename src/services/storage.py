@@ -15,7 +15,8 @@ def _candidate_paths(file_id: str) -> list[Path]:
     candidates = [root / file_id, Path.cwd() / file_id]
     try:
         repo_root = Path(__file__).resolve().parents[2]
-        candidates.insert(0, repo_root / file_id)
+        if repo_root not in candidates:
+            candidates.append(repo_root / file_id)
     except Exception:  # noqa: BLE001
         pass
     uniq: list[Path] = []

@@ -5,6 +5,7 @@ the row (status=failed + message), never as a crash.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from sqlalchemy import text as sql_text
@@ -18,7 +19,7 @@ from src.graph.agent import agentic_ai
 from src.graph.state import AgentState
 from src.observability.events import get_logger, log_span
 from src.services.storage import write_attachment
-from src.tools.csv_tool import inspect_schema, query_sql
+from src.tools.csv_tool import _resolve_table_name, inspect_schema, query_sql
 
 try:
     from src.api.investigations import _init_schema  # noqa: PLC0415
@@ -143,12 +144,13 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
             return {
                 "error": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
             }
-        columns = list(columns_json or "[]")
+        columns = json.loads(columns_json or "[]")
         schema = {
             "columns": columns,
             "row_count": row_count or 0,
         }
-        sql = f"SELECT {', '.join(schema['columns'])} FROM uploaded_data LIMIT {get_settings().max_query_rows}"
+        table = _resolve_table_name(file_id)
+        sql = f"SELECT {', '.join(schema['columns'])} FROM {table} LIMIT {get_settings().max_query_rows}"
         df = query_sql(file_id, sql, max_rows=get_settings().max_query_rows)
         return {
             "file_id": file_id,

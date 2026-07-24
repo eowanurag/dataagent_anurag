@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     def resolve_provider(self) -> str:
         """The effective provider name, or ``"stub"`` when no key is present."""
         p = (self.llm_provider or "auto").strip().lower()
+        if p == "nvidia":
+            return "openrouter"
         if p != "auto":
             return p
         if self.anthropic_api_key:
@@ -70,3 +72,8 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+def reset_settings() -> None:
+    global _settings
+    _settings = None

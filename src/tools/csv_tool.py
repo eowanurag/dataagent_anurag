@@ -48,7 +48,8 @@ def query_sql(file_id: str, sql: str, max_rows: int = 5000) -> pd.DataFrame:
         df = pd.read_csv(path)
         table = _resolve_table_name(file_id)
         df.to_sql(table, conn, index=False, if_exists="replace")
-        result = pd.read_sql(f"{sql.strip()} LIMIT {int(max_rows)}", conn)
+        sql = re.sub(r"(?i)\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*$", "", sql.strip())
+        result = pd.read_sql(f"{sql} LIMIT {int(max_rows)}", conn)
         return result
     except CsvQueryError:
         raise

@@ -4,7 +4,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from src.api import create_app
-from src.config.settings import get_settings
+from src.config.settings import get_settings, reset_settings
 
 
 def _client() -> TestClient:
@@ -12,6 +12,7 @@ def _client() -> TestClient:
 
 
 def test_storage_root_defaults_to_dot(monkeypatch):
+    reset_settings()
     monkeypatch.delenv("AGENT_STORAGE_ROOT", raising=False)
     assert get_settings().storage_root == "."
 
@@ -19,6 +20,7 @@ def test_storage_root_defaults_to_dot(monkeypatch):
 def test_upload_csv_creates_investigation_and_file(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
+    reset_settings()
     monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
 
     payload = (
@@ -51,6 +53,7 @@ def test_upload_csv_creates_investigation_and_file(tmp_path, monkeypatch):
 def test_ask_question_over_csv_returns_cited_answer(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
+    reset_settings()
     monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
 
     payload = "district,count\nA,10\nB,25\nC,8\n"
@@ -82,6 +85,7 @@ def test_ask_question_over_csv_returns_cited_answer(tmp_path, monkeypatch):
 def test_ask_question_without_files_returns_actionable_error(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
+    reset_settings()
     monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
 
     with _client() as client:
@@ -101,6 +105,7 @@ def test_ask_question_without_files_returns_actionable_error(tmp_path, monkeypat
 def test_history_returns_messages(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
+    reset_settings()
     monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
 
     with _client() as client:

@@ -10,6 +10,7 @@ class AgentState(TypedDict, total=False):
     user_id: str
     source: str | None
     question: str
+    file_id: str | None
     plan: str | None
     sql: str | None
     sql_rows: list[dict] | None
