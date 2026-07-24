@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.5-flash",
-    "openrouter": "tencent/hy3",  # cheap default ($0.14/M in) — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
+    "openrouter": "meta-llama/llama-3.1-70b-instruct",
 }
 
 
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 
     def resolve_model(self) -> str:
         if self.llm_model:
-            return self.llm_model
+            return _normalize_model_name(self.resolve_provider(), self.llm_model)
         return DEFAULT_MODELS.get(self.resolve_provider(), "")
 
     def key_for(self, provider: str) -> str:
@@ -62,6 +62,37 @@ class Settings(BaseSettings):
             "gemini": self.gemini_api_key,
             "openrouter": self.openrouter_api_key,
         }.get(provider, "")
+
+
+PROVIDER_ALIASES = {
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "nvidia": "openrouter",
+    "openrouter": "openrouter",
+}
+
+MODEL_ALIASES = {
+    "anthropic": {},
+    "gemini": {},
+    "openrouter": {
+        "meta/llama-3.1-70b-instruct": "meta-llama/llama-3.1-70b-instruct",
+    },
+}
+
+
+def provider_name_for(provider: str | None) -> str:
+    if not provider:
+        return ""
+    key = (provider or "").strip().lower()
+    return PROVIDER_ALIASES.get(key, key)
+
+
+def _normalize_model_name(provider: str | None, model: str) -> str:
+    p = provider_name_for(provider)
+    aliases = MODEL_ALIASES.get(p, {})
+    if model in aliases:
+        return aliases[model]
+    return model
 
 
 _settings: Settings | None = None
