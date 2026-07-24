@@ -125,6 +125,9 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
         from src.db.models import InvestigationFileRow
 
         _init_schema()
+        file_id = None
+        columns_json = None
+        row_count = None
         with create_db_session() as session:
             file_row = (
                 session.query(InvestigationFileRow)
@@ -132,13 +135,15 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
                 .order_by(InvestigationFileRow.created_at.asc())
                 .first()
             )
-        if file_row is None:
+            if file_row is not None:
+                file_id = file_row.file_id
+                columns_json = file_row.columns_json
+                row_count = file_row.row_count
+        if file_id is None:
             return {
                 "error": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
             }
-        file_id = file_row.file_id
-        columns = list(file_row.columns_json or "[]")
-        row_count = file_row.row_count
+        columns = list(columns_json or "[]")
         schema = {
             "columns": columns,
             "row_count": row_count or 0,
