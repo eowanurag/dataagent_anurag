@@ -55,6 +55,9 @@ def test_ask_question_over_csv_returns_cited_answer(tmp_path, monkeypatch):
     storage.mkdir()
     reset_settings()
     monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("AGENT_LLM_MODEL", "meta-llama/llama-3.1-70b-instruct")
+    monkeypatch.setenv("AGENT_NVIDIA_API_KEY", "")
 
     payload = "district,count\nA,10\nB,25\nC,8\n"
 
@@ -74,12 +77,13 @@ def test_ask_question_over_csv_returns_cited_answer(tmp_path, monkeypatch):
         )
         assert res.status_code == 200, res.text
         data = res.json()["data"]
-        # In tests without a real LLM key, the run is expected to fail gracefully.
-        assert data["status"] == "failed"
+        assert data["status"] == "completed"
         assert data["source"] == "csv"
-        assert len(data["citations"]) >= 0
-        # sql may be None when the run fails before execution
-        assert data.get("sql") is None or isinstance(data["sql"], str)
+        assert isinstance(data.get("answer_text"), str)
+        assert data["answer_text"]
+        assert isinstance(data.get("sql"), str)
+        assert data["sql"]
+        assert isinstance(data.get("citations"), list)
 
 
 def test_ask_question_without_files_returns_actionable_error(tmp_path, monkeypatch):

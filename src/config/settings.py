@@ -14,6 +14,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.5-flash",
     "openrouter": "meta-llama/llama-3.1-70b-instruct",
+    "nvidia": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
 }
 
 
@@ -31,7 +32,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
+    nvidia_api_key: str = Field(default="")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
+    nvidia_base_url: str = Field(default="https://integrate.api.nvidia.com/v1")
     log_level: str = Field(default="INFO")
     storage_root: str = Field(default=".")
     max_query_rows: int = Field(default=5000)
@@ -39,8 +42,6 @@ class Settings(BaseSettings):
     def resolve_provider(self) -> str:
         """The effective provider name, or ``"stub"`` when no key is present."""
         p = (self.llm_provider or "auto").strip().lower()
-        if p == "nvidia":
-            return "openrouter"
         if p != "auto":
             return p
         if self.anthropic_api_key:
@@ -49,6 +50,8 @@ class Settings(BaseSettings):
             return "gemini"
         if self.openrouter_api_key:
             return "openrouter"
+        if self.nvidia_api_key:
+            return "nvidia"
         return "stub"
 
     def resolve_model(self) -> str:
@@ -61,13 +64,14 @@ class Settings(BaseSettings):
             "anthropic": self.anthropic_api_key,
             "gemini": self.gemini_api_key,
             "openrouter": self.openrouter_api_key,
+            "nvidia": self.nvidia_api_key,
         }.get(provider, "")
 
 
 PROVIDER_ALIASES = {
     "anthropic": "anthropic",
     "gemini": "gemini",
-    "nvidia": "openrouter",
+    "nvidia": "nvidia",
     "openrouter": "openrouter",
 }
 
@@ -76,6 +80,12 @@ MODEL_ALIASES = {
     "gemini": {},
     "openrouter": {
         "meta/llama-3.1-70b-instruct": "meta-llama/llama-3.1-70b-instruct",
+    },
+    "nvidia": {
+        "meta/llama-3.1-nemotron-70b-instruct": "nvidia/llama-3.1-nemotron-70b-instruct",
+        "llama-3.1-nemotron-70b-instruct": "nvidia/llama-3.1-nemotron-70b-instruct",
+        "meta/llama-3.1-70b-instruct": "nvidia/llama-3.1-70b-instruct",
+        "llama-3.1-70b-instruct": "nvidia/llama-3.1-70b-instruct",
     },
 }
 

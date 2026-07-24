@@ -45,4 +45,5 @@ def no_keys(monkeypatch):
     monkeypatch.setenv("AGENT_ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("AGENT_GEMINI_API_KEY", "")
     monkeypatch.setenv("AGENT_OPENROUTER_API_KEY", "")
+    monkeypatch.setenv("AGENT_NVIDIA_API_KEY", "")
     yield
