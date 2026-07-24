@@ -86,7 +86,7 @@ def plan(state: AgentState) -> AgentState:
         if source == "csv":
             file_id = state.get("file_id")
             if not file_id:
-                file_id = f"file-{investigation_id}"
+                return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "plan"}
             schema = inspect_schema(file_id)
             schema_summary = f"columns={schema['columns']}, row_count={schema['row_count']}"
             files_context = "uploaded CSV"
@@ -121,7 +121,7 @@ def generate_sql(state: AgentState) -> AgentState:
         if source == "csv":
             file_id = state.get("file_id")
             if not file_id:
-                file_id = f"file-{investigation_id}"
+                return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "generate_sql"}
             schema = inspect_schema(file_id)
             schema_summary = ", ".join(schema["columns"])
     except Exception as exc:  # noqa: BLE001
@@ -160,38 +160,43 @@ def validate_sql(state: AgentState) -> AgentState:
 
 def execute_query(state: AgentState) -> AgentState:
     source = state.get("source") or "csv"
-    sql = state.get("sql") or ""
+    sql = (state.get("sql") or "").strip()
     investigation_id = state.get("investigation_id")
     run_id = state.get("run_id")
     max_rows = 5000
 
-    if source == "csv":
-        file_id = state.get("file_id")
-        if not file_id:
-            file_id = f"file-{investigation_id}"
-        try:
-            df = query_sql(file_id, sql, max_rows=max_rows)
-        except CsvQueryError as exc:
-            return {"error": f"csv query failed: {exc}", "status": "failed", "checkpoint": "execute_query"}
-        except Exception as exc:  # noqa: BLE001
-            return {"error": f"csv query failed: {exc}", "status": "failed", "checkpoint": "execute_query"}
-        try:
-            record_audit(
-                **_audit_kwargs(investigation_id=investigation_id, run_id=run_id),
-                action="csv_query_executed",
-                source="csv",
-                sql=sql,
-                row_count=int(df.shape[0]),
-            )
-        except Exception:  # noqa: BLE001
-            pass
-        return {
-            "sql_rows": df.head(500).to_dict(orient="records"),
-            "sql_row_count": int(df.shape[0]),
-            "checkpoint": "execute_query",
-        }
+    if source != "csv":
+        return {"error": "unsupported source in phase 1", "status": "failed", "checkpoint": "execute_query"}
 
-    return {"error": "unsupported source in phase 1", "status": "failed", "checkpoint": "execute_query"}
+    file_id = state.get("file_id")
+    if not file_id:
+        msg = "No files are attached to this investigation yet. Upload CSV data before asking questions."
+        return {"error": msg, "status": "failed", "checkpoint": "execute_query"}
+    if not sql:
+        return {"error": "sql is empty", "status": "failed", "checkpoint": "execute_query"}
+
+    try:
+        df = query_sql(file_id, sql, max_rows=max_rows)
+    except CsvQueryError as exc:
+        return {"error": f"csv query failed: {exc}", "status": "failed", "checkpoint": "execute_query"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"csv query failed: {exc}", "status": "failed", "checkpoint": "execute_query"}
+
+    try:
+        record_audit(
+            **_audit_kwargs(investigation_id=investigation_id, run_id=run_id),
+            action="csv_query_executed",
+            source="csv",
+            sql=sql,
+            row_count=int(df.shape[0]),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "sql_rows": df.head(500).to_dict(orient="records"),
+        "sql_row_count": int(df.shape[0]),
+        "checkpoint": "execute_query",
+    }
 
 
 def synthesize_answer(state: AgentState) -> AgentState:
@@ -236,6 +241,7 @@ def synthesize_answer(state: AgentState) -> AgentState:
 def handle_error(state: AgentState) -> AgentState:
     investigation_id = state.get("investigation_id")
     run_id = state.get("run_id")
+    error_message = state.get("error")
     try:
         record_audit(
             **_audit_kwargs(investigation_id=investigation_id, run_id=run_id),
@@ -243,12 +249,12 @@ def handle_error(state: AgentState) -> AgentState:
             source=state.get("source"),
             sql=state.get("sql"),
             row_count=state.get("sql_row_count"),
-            error_message=state.get("error"),
+            error_message=error_message,
             payload={"checkpoint": state.get("checkpoint")},
         )
     except Exception:  # noqa: BLE001
         pass
-    return {"status": "failed", "checkpoint": "handle_error"}
+    return {"status": "failed", "error": error_message, "checkpoint": "handle_error"}
 
 
 def finalize(state: AgentState) -> AgentState:

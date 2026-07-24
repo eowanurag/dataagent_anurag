@@ -386,6 +386,12 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
         run_row.error_message = str(exc)
         run_row.updated_at = datetime.now(timezone.utc)
         session.commit()
+
+    if status == "failed" and not answer_text:
+        answer_text = run_row.error_message or "The analysis failed. Check the question or try a simpler query."
+        if not citations_list:
+            citations_list = []
+        chart_spec = None
     latency_ms = int((__import__("time").perf_counter() - t0) * 1000)
 
     assistant_msg_id = f"msg-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"

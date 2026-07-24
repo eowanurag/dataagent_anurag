@@ -224,7 +224,10 @@ async function askQuestion() {
     const body = await res.json();
     if (!res.ok) throw new Error(body?.detail?.message || `HTTP ${res.status}`);
     const data = body.data;
-    if (data.status === "failed") throw new Error(data.error_message || "The analysis failed.");
+    if (data.status === "failed") {
+      const msg = data.error_message || "The analysis failed.";
+      throw new Error(msg);
+    }
     appendMessage("user", question, [], null, null, false, []);
     appendMessage("assistant", data.answer_text, data.citations || [], data.sql, data.latency_ms, false, data.followup_suggestions || []);
     $("answer").textContent = data.answer_text || "";
