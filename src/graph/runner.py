@@ -31,6 +31,21 @@ except Exception:  # noqa: BLE001
 log = get_logger("runner")
 
 
+def _apply_overrides(state: AgentState) -> None:
+    try:
+        from src.services.settings_store import load_user_settings
+        state.setdefault("meta", {})
+        if not isinstance(state["meta"], dict):
+            state["meta"] = dict(state["meta"])
+        overrides = load_user_settings()
+        if overrides.get("provider"):
+            state["meta"]["provider"] = overrides["provider"]
+        if overrides.get("model"):
+            state["meta"]["model"] = overrides["model"]
+    except Exception:
+        pass
+
+
 def run_agent(input_text: str, instruction: str) -> str:
     log = get_logger("runner")
 
@@ -46,7 +61,9 @@ def run_agent(input_text: str, instruction: str) -> str:
         "instruction": instruction,
         "question": input_text,
         "error": None,
+        "meta": {},
     }
+    _apply_overrides(initial)
     with log_span(log, "agent_run", run_id=run_id) as span:
         final: AgentState = agentic_ai.invoke(initial)
         span["status"] = final.get("status", "completed")
@@ -102,7 +119,9 @@ def run_investigation_graph(
         "source": source,
         "file_id": payload.get("file_id"),
         "error": None,
+        "meta": {},
     }
+    _apply_overrides(initial)
     with log_span(log, "investigation_graph", run_id=run_id) as span:
         final: AgentState = agentic_ai.invoke(initial)
         span["status"] = final.get("status", "completed")

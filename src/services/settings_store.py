@@ -46,7 +46,7 @@ def load_user_settings() -> dict[str, Any]:
     key = _KEY
     with create_db_session() as session:
         row = session.execute(
-            "SELECT value FROM settings_store WHERE key = :k",
+            sql_text("SELECT value FROM settings_store WHERE key = :k"),
             {"k": key},
         ).fetchone()
         if row is None:
@@ -101,11 +101,13 @@ def _upsert(payload: dict[str, Any]) -> None:
         _mem[_KEY] = payload
     with create_db_session() as session:
         session.execute(
-            """
-            INSERT INTO settings_store (key, value, updated_at)
-            VALUES (:k, :v, :now)
-            ON CONFLICT(key) DO UPDATE SET value = :v, updated_at = :now
-            """,
+            sql_text(
+                """
+                INSERT INTO settings_store (key, value, updated_at)
+                VALUES (:k, :v, :now)
+                ON CONFLICT(key) DO UPDATE SET value = :v, updated_at = :now
+                """
+            ),
             {"k": _KEY, "v": json.dumps(payload, default=str), "now": _now_iso()},
         )
         session.commit()

@@ -128,8 +128,19 @@ async function applyModel() {
   const provider = ($("provider-select")?.value || "").trim();
   const model = ($("model-select")?.value || "").trim();
   if (!provider || !model) { if (errorBox) { errorBox.textContent = "Choose provider and model."; errorBox.hidden = false; } return; }
-  await loadModelUsage(provider, model);
-  if (errorBox) { errorBox.textContent = "Model selection saved for this session."; errorBox.hidden = false; }
+  try {
+    const res = await fetch("/settings/provider-model", {
+      method: "POST",
+      headers: {"content-type":"application/json"},
+      body: JSON.stringify({provider, model}),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.detail?.message || body?.detail || `HTTP ${res.status}`);
+    await loadModelUsage(provider, model);
+    if (errorBox) { errorBox.textContent = "Model selection saved."; errorBox.hidden = false; }
+  } catch (err) {
+    if (errorBox) { errorBox.textContent = err.message; errorBox.hidden = false; }
+  }
 }
 
 async function createInvestigation() {
