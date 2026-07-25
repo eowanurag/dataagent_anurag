@@ -3,8 +3,18 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from src.graph.edges import after_classify, after_transform
+from src.graph.edges import (
+    after_build_temp_schema,
+    after_classify,
+    after_execute_query,
+    after_generate_sql,
+    after_plan,
+    after_synthesize_answer,
+    after_transform,
+    after_validate_sql,
+)
 from src.graph.nodes import (
+    build_temp_schema_node,
     classify_source,
     execute_query,
     finalize,
@@ -22,6 +32,7 @@ def _build_graph():
     g = StateGraph(AgentState)
     g.add_node("transform_text", transform_text)
     g.add_node("classify_source", classify_source)
+    g.add_node("build_temp_schema", build_temp_schema_node)
     g.add_node("plan", plan)
     g.add_node("generate_sql", generate_sql)
     g.add_node("validate_sql", validate_sql)
@@ -31,12 +42,13 @@ def _build_graph():
     g.add_node("finalize", finalize)
 
     g.set_entry_point("classify_source")
-    g.add_conditional_edges("classify_source", after_classify, {"plan": "plan", "transform_text": "transform_text", "handle_error": "handle_error"})
-    g.add_conditional_edges("plan", after_classify, {"generate_sql": "generate_sql", "handle_error": "handle_error"})
-    g.add_conditional_edges("generate_sql", after_classify, {"validate_sql": "validate_sql", "handle_error": "handle_error"})
+    g.add_conditional_edges("classify_source", after_classify, {"build_temp_schema": "build_temp_schema", "transform_text": "transform_text", "plan": "plan", "handle_error": "handle_error"})
+    g.add_conditional_edges("build_temp_schema", after_build_temp_schema, {"plan": "plan", "handle_error": "handle_error"})
+    g.add_conditional_edges("plan", after_plan, {"generate_sql": "generate_sql", "handle_error": "handle_error"})
+    g.add_conditional_edges("generate_sql", after_generate_sql, {"validate_sql": "validate_sql", "handle_error": "handle_error"})
     g.add_edge("validate_sql", "execute_query")
-    g.add_conditional_edges("execute_query", after_classify, {"synthesize_answer": "synthesize_answer", "handle_error": "handle_error"})
-    g.add_conditional_edges("synthesize_answer", after_classify, {"finalize": "finalize", "handle_error": "handle_error"})
+    g.add_conditional_edges("execute_query", after_execute_query, {"synthesize_answer": "synthesize_answer", "handle_error": "handle_error"})
+    g.add_conditional_edges("synthesize_answer", after_synthesize_answer, {"finalize": "finalize", "handle_error": "handle_error"})
     g.add_conditional_edges("transform_text", after_transform, {"finalize": "finalize", "handle_error": "handle_error"})
     g.add_edge("handle_error", END)
     g.add_edge("finalize", END)

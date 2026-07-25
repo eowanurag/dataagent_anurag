@@ -6,6 +6,7 @@ return; never raise through the graph.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,7 +16,14 @@ from src.llm.providers.base import LLMError
 from src.observability.events import get_logger, log_span
 from src.services.audit import record_audit
 from src.services.storage import read_attachment
-from src.tools.csv_tool import CsvQueryError, _resolve_table_name, inspect_schema, query_sql
+from src.tools.csv_tool import (
+    CsvQueryError,
+    _resolve_table_name,
+    build_temp_schema,
+    inspect_schema,
+    query_sql,
+    query_sql_multi,
+)
 
 log = get_logger("graph")
 
@@ -71,26 +79,73 @@ def classify_source(state: AgentState) -> AgentState:
     if not investigation_id:
         return {"source": "csv", "checkpoint": "classify_source"}
 
-    source = "csv"
-    return {"source": source, "checkpoint": "classify_source"}
+    file_ids = list(state.get("file_ids") or [])
+    if not file_ids:
+        return {
+            "error": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
+            "status": "failed",
+            "checkpoint": "classify_source",
+        }
+
+    out: dict[str, Any] = {"source": "csv", "checkpoint": "classify_source"}
+    if len(file_ids) > 1:
+        out["file_ids"] = file_ids
+        try:
+            out["temp_schema"] = build_temp_schema(file_ids)
+        except Exception as exc:  # noqa: BLE001
+            out["error"] = f"temp schema build failed: {exc}"
+            out["status"] = "failed"
+    else:
+        out["file_id"] = file_ids[0]
+    return out
+
+
+def build_temp_schema_node(state: AgentState) -> AgentState:
+    file_ids = list(state.get("file_ids") or [])
+    if not file_ids:
+        return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "build_temp_schema"}
+    try:
+        temp_schema = build_temp_schema(file_ids)
+        return {"temp_schema": temp_schema, "checkpoint": "build_temp_schema"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"temp schema build failed: {exc}", "status": "failed", "checkpoint": "build_temp_schema"}
 
 
 def plan(state: AgentState) -> AgentState:
     investigation_id = state.get("investigation_id")
     question = state.get("question") or ""
     source = state.get("source") or "csv"
+    temp_schema = state.get("temp_schema")
+    file_ids = state.get("file_ids") or ([state.get("file_id")] if state.get("file_id") else [])
+    file_ids = [fid for fid in file_ids if fid]
 
     schema_summary = ""
     files_context = "none"
     try:
         if source == "csv":
-            file_id = state.get("file_id")
-            if not file_id:
-                return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "plan"}
-            schema = inspect_schema(file_id)
-            table_name = _resolve_table_name(file_id)
-            schema_summary = f"table={table_name}, columns={schema['columns']}, row_count={schema['row_count']}"
-            files_context = "uploaded CSV"
+            if not file_ids:
+                return {
+                    "error": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
+                    "status": "failed",
+                    "checkpoint": "plan",
+                }
+            if temp_schema and isinstance(temp_schema.get("tables"), list) and temp_schema["tables"]:
+                tables = temp_schema["tables"]
+                schema_summary = "\n".join(
+                    f"table={t.get('table_name')}, columns={', '.join(t.get('columns') or [])}, row_count={t.get('row_count') or 0}"
+                    for t in tables
+                )
+                files_context = f"attached files: {', '.join(t.get('table_name') for t in tables)}"
+            else:
+                inspected = []
+                for file_id in file_ids:
+                    schema = inspect_schema(file_id)
+                    inspected.append((_resolve_table_name(file_id), schema))
+                schema_summary = "\n".join(
+                    f"table={table}, columns={', '.join(schema['columns'])}, row_count={schema['row_count']}"
+                    for table, schema in inspected
+                )
+                files_context = f"attached files: {', '.join(table for table, _ in inspected)}"
     except Exception as exc:  # noqa: BLE001
         return {"error": f"schema lookup failed: {exc}", "status": "failed", "checkpoint": "plan"}
 
@@ -99,7 +154,7 @@ def plan(state: AgentState) -> AgentState:
         f"Investigation ID: {investigation_id}\n"
         f"Source: {source}\n"
         f"Attached files: {files_context}\n"
-        f"Schema summary: {schema_summary}\n"
+        f"Schema summary:\n{schema_summary}\n"
         f"Question: {question}\n"
     )
     try:
@@ -116,26 +171,47 @@ def generate_sql(state: AgentState) -> AgentState:
     question = state.get("question") or ""
     investigation_id = state.get("investigation_id")
     row_limit = 5000
+    temp_schema = state.get("temp_schema")
+    file_ids = state.get("file_ids") or ([state.get("file_id")] if state.get("file_id") else [])
+    file_ids = [fid for fid in file_ids if fid]
 
     schema_summary = ""
     try:
         if source == "csv":
-            file_id = state.get("file_id")
-            if not file_id:
-                return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "status": "failed", "checkpoint": "generate_sql"}
-            schema = inspect_schema(file_id)
-            table_name = _resolve_table_name(file_id)
-            schema_summary = f"table={table_name}, columns={', '.join(schema['columns'])}"
+            if not file_ids:
+                return {
+                    "error": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
+                    "status": "failed",
+                    "checkpoint": "generate_sql",
+                }
+            if temp_schema and isinstance(temp_schema.get("tables"), list) and temp_schema["tables"]:
+                schema_summary = "\n".join(
+                    f"table={t.get('table_name')}, columns={', '.join(t.get('columns') or [])}"
+                    for t in temp_schema["tables"]
+                )
+            else:
+                inspected = []
+                for file_id in file_ids:
+                    schema = inspect_schema(file_id)
+                    inspected.append((_resolve_table_name(file_id), schema))
+                schema_summary = "\n".join(
+                    f"table={table}, columns={', '.join(schema['columns'])}"
+                    for table, schema in inspected
+                )
     except Exception as exc:  # noqa: BLE001
         return {"error": f"schema lookup failed: {exc}", "status": "failed", "checkpoint": "generate_sql"}
 
     system = load_prompt("sql")
     user = (
         f"Source: {source}\n"
-        f"Schema/columns: {schema_summary}\n"
+        f"Schema/columns:\n{schema_summary}\n"
         f"Question: {question}\n"
         f"Row limit: {row_limit}\n"
     )
+    if len(file_ids) > 1:
+        user += (
+            "Multiple files are attached. If a cross-file query is needed, use explicit JOINs with table aliases only.\n"
+        )
     try:
         sql_text = _complete("generate_sql", system, user, max_tokens=256)
         sql_text = sql_text.strip()
@@ -152,11 +228,33 @@ def validate_sql(state: AgentState) -> AgentState:
         return {"error": "sql is empty", "status": "failed", "checkpoint": "validate_sql"}
 
     normalized = sql.upper()
-    forbidden = ["--", ";", "/*", "*/", "@@", "\\", "DROP ", "DELETE ", "UPDATE ", "INSERT ", "ALTER ", "TRUNCATE ", "EXEC ", "EXECUTE "]
+    forbidden = [
+        "--", ";", "/*", "*/", "@@", "\\",
+        "DROP ", "DELETE ", "UPDATE ", "INSERT ", "ALTER ", "TRUNCATE ", "EXEC ", "EXECUTE ",
+    ]
     for token in forbidden:
         if token in normalized:
             return {"error": f"sql contains forbidden token: {token}", "status": "failed", "checkpoint": "validate_sql"}
 
+    file_ids = [fid for fid in (state.get("file_ids") or []) if fid]
+    if len(file_ids) <= 1:
+        single_file_forbidden = [" JOIN ", " ON ", " AS "]
+        for token in single_file_forbidden:
+            if token in normalized:
+                return {"error": f"sql contains forbidden token for single-file query: {token.strip()}", "status": "failed", "checkpoint": "validate_sql"}
+        return {"checkpoint": "validate_sql"}
+
+    join_pattern = re.compile(r"\bJOIN\b\s+\w+\s+\bAS\b\s+\w+", normalized)
+    join_count = len(re.findall(r"\bJOIN\b", normalized))
+    if join_count != 1:
+        return {"error": "multi-file sql requires exactly one JOIN with one alias", "status": "failed", "checkpoint": "validate_sql"}
+    if not join_pattern.search(normalized):
+        return {"error": "multi-file sql requires JOIN with a single alias", "status": "failed", "checkpoint": "validate_sql"}
+    if not re.search(r"\bON\b", normalized):
+        return {"error": "multi-file sql requires ON with join keys", "status": "failed", "checkpoint": "validate_sql"}
+    join_keys = re.findall(r"\bON\b\s+[^=]+=\s*[^=]+", normalized)
+    if len(join_keys) != 1:
+        return {"error": "multi-file sql requires one join condition", "status": "failed", "checkpoint": "validate_sql"}
     return {"checkpoint": "validate_sql"}
 
 
@@ -170,15 +268,19 @@ def execute_query(state: AgentState) -> AgentState:
     if source != "csv":
         return {"error": "unsupported source in phase 1", "status": "failed", "checkpoint": "execute_query"}
 
-    file_id = state.get("file_id")
-    if not file_id:
+    file_ids = state.get("file_ids") or ([state.get("file_id")] if state.get("file_id") else [])
+    file_ids = [fid for fid in file_ids if fid]
+    if not file_ids:
         msg = "No files are attached to this investigation yet. Upload CSV data before asking questions."
         return {"error": msg, "status": "failed", "checkpoint": "execute_query"}
     if not sql:
         return {"error": "sql is empty", "status": "failed", "checkpoint": "execute_query"}
 
     try:
-        df = query_sql(file_id, sql, max_rows=max_rows)
+        if len(file_ids) > 1:
+            df = query_sql_multi(file_ids, sql, max_rows=max_rows)
+        else:
+            df = query_sql(file_ids[0], sql, max_rows=max_rows)
     except CsvQueryError as exc:
         return {"error": f"csv query failed: {exc}", "status": "failed", "checkpoint": "execute_query"}
     except Exception as exc:  # noqa: BLE001

@@ -11,6 +11,8 @@ class AgentState(TypedDict, total=False):
     source: str | None
     question: str
     file_id: str | None
+    file_ids: list[str] | None
+    temp_schema: dict[str, Any] | None
     plan: str | None
     sql: str | None
     sql_rows: list[dict] | None

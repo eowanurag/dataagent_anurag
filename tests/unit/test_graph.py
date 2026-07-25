@@ -23,8 +23,8 @@ def test_graph_compiles_with_new_nodes():
 def test_error_edge_routes_to_handler():
     state: AgentState = {"error": "boom"}
     assert after_classify(state) == "handle_error"
-    state = {"error": None}
-    assert after_classify(state) == "plan"
+    state = {"error": None, "file_ids": ["f1"]}
+    assert after_classify(state) == "build_temp_schema"
 
 
 def test_classify_requires_question():

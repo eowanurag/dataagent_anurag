@@ -342,6 +342,11 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
     )
     session.commit()
 
+    allowed_file_ids = {row.file_id for row in files}
+    requested_file_ids = [fid for fid in (payload.get("file_ids") or []) if fid in allowed_file_ids]
+    if not requested_file_ids:
+        requested_file_ids = [file_row.file_id]
+
     sql_text_str = None
     sql_rows_df = None
     sql_row_count = None
@@ -371,6 +376,7 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
             user_id=actor["user_id"],
             question=question,
             source="csv",
+            file_ids=requested_file_ids,
         )
         status = result.get("status") or "completed"
         run_row.status = status
@@ -378,6 +384,15 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
         run_row.error_message = result.get("error")
         run_row.updated_at = datetime.now(timezone.utc)
         session.commit()
+
+        if status != "failed":
+            answer_text = result.get("answer_text") or answer_text
+            sql_text_str = result.get("sql") or sql_text_str
+            sql_row_count = result.get("sql_row_count") or sql_row_count
+            sql_rows_df = result.get("sql_rows") or sql_rows_df
+            chart_spec = result.get("chart_spec") or chart_spec
+            citations_list = result.get("citations") or citations_list
+            followup_suggestions = result.get("followup_suggestions") or followup_suggestions
     except Exception as exc:  # noqa: BLE001
         log.error("run_failed", error=str(exc))
         status = "failed"
