@@ -12,8 +12,16 @@ router = APIRouter()
 def get_models() -> dict:
     variants = list_variants()
     selected = best_variant()
+    unique = []
+    seen = set()
+    for item in variants:
+        key = (item.get("id"), item.get("provider"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
     return {
         "selected": selected,
-        "models": variants,
-        "count": len(variants),
+        "models": unique,
+        "count": len(unique),
     }

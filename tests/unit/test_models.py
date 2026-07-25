@@ -23,6 +23,6 @@ def test_list_variants_has_expected_candidates():
     assert any(v["id"] == "meta-llama/llama-3.1-70b-instruct" for v in variants)
 
 
-def test_canonicalize_maps_legacy_model_ids():
-    assert canonicalize("meta/llama-3.1-70b-instruct") == "meta-llama/llama-3.1-70b-instruct"
+def test_canonicalize_is_identity_when_no_alias():
+    assert canonicalize("meta/llama-3.1-70b-instruct") == "meta/llama-3.1-70b-instruct"
     assert canonicalize("") == ""

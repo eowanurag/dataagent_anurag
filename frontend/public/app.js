@@ -744,6 +744,44 @@ function appendMessage(role, content, citations, sql, latency, isHistory, follow
   historyContainer.appendChild(bubble);
 }
 
+async function exportCsv() {
+  if (!currentInvestigationId) return;
+  const res = await fetch(`/investigations/${encodeURIComponent(currentInvestigationId)}/export/csv`);
+  if (!res.ok) { alert(`CSV export failed: ${res.status}`); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `investigation-${currentInvestigationId}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportPdf() {
+  if (!currentInvestigationId) return;
+  const images = [];
+  document.querySelectorAll("#chart-wrap canvas").forEach((canvas) => {
+    try { images.push(canvas.toDataURL("image/png")); } catch {}
+  });
+  const res = await fetch(`/investigations/${encodeURIComponent(currentInvestigationId)}/export/pdf`, {
+    method: "POST",
+    headers: {"content-type":"application/json"},
+    body: JSON.stringify({chart_images: images}),
+  });
+  if (!res.ok) { alert(`PDF export failed: ${res.status}`); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `investigation-${currentInvestigationId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadHealth();
   loadHistory();
@@ -758,6 +796,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const applyBtn = $("apply-model-btn");
   if (applyBtn) applyBtn.addEventListener("click", applyModel);
+
+  const exportCsvBtn = $("export-csv-btn");
+  const exportPdfBtn = $("export-pdf-btn");
+  if (exportCsvBtn) exportCsvBtn.addEventListener("click", exportCsv);
+  if (exportPdfBtn) exportPdfBtn.addEventListener("click", exportPdf);
 
   const assetsToggle = $("assets-toggle");
   const assetsBody = $("assets-body");

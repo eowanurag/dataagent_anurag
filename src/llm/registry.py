@@ -24,9 +24,8 @@ _VARIANTS: list[ModelVariant] = [
     ModelVariant(id="qwen/qwen-2.5-72b-instruct", provider="openrouter", label="Qwen 2.5 72B", context=32768, tags=["chat","balanced"]),
     ModelVariant(id="deepseek/deepseek-chat", provider="openrouter", label="DeepSeek Chat", context=65536, tags=["chat","fast"]),
     # Direct NVIDIA NIM candidates.
-    ModelVariant(id="nvidia/llama-3.3-nemotron-super-49b-v1.5", provider="nvidia", label="Nemotron Super 49B v1.5", context=131072, tags=["chat","balanced"]),
-    ModelVariant(id="nvidia/llama-3.1-nemotron-70b-instruct", provider="nvidia", label="Nemotron 70B", context=32768, tags=["chat","balanced"]),
     ModelVariant(id="meta/llama-3.1-70b-instruct", provider="nvidia", label="Llama 3.1 70B", context=131072, tags=["chat","balanced"]),
+    ModelVariant(id="nvidia/llama-3.1-nemotron-70b-instruct", provider="nvidia", label="Nemotron 70B", context=32768, tags=["chat","balanced"]),
 ]
 
 
@@ -61,6 +60,5 @@ def best_variant(preferred_id: str = "") -> dict[str, Any]:
 def canonicalize(model_id: str) -> str:
     cleaned = (model_id or "").strip().lower()
     mapping = {
-        "meta/llama-3.1-70b-instruct": "meta-llama/llama-3.1-70b-instruct",
     }
     return mapping.get(cleaned, model_id)

@@ -24,7 +24,7 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="Zero-Shot Agent", version="0.1.0", lifespan=_lifespan)
 
-    from src.api import assets, health, investigations, models, runs, settings
+    from src.api import assets, exports, health, investigations, models, runs, settings
 
     app.include_router(health.router)
     app.include_router(models.router)
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.router)
     app.include_router(assets.router)
     app.include_router(settings.router)
+    app.include_router(exports.router)
 
     if _FRONTEND_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")
