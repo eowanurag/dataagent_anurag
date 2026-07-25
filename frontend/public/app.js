@@ -760,16 +760,33 @@ function renderErDiagram(datasets, relations, mermaidEr) {
   if (summary) summary.textContent = `${datasets.length} datasets · ${relations.length} relationships inferred`;
   container.innerHTML = "";
   if (typeof mermaidEr === "string" && mermaidEr.trim()) {
-    const trigger = document.createElement("button");
-    trigger.textContent = "Open Mermaid ER Diagram";
-    trigger.style.marginTop = "10px";
-    trigger.style.padding = "8px 10px";
-    trigger.style.borderRadius = "6px";
-    trigger.style.border = "1px solid #e5e7eb";
-    trigger.style.background = "#ffffff";
-    trigger.style.cursor = "pointer";
-    trigger.addEventListener("click", () => openMermaidErOverlay(mermaidEr));
-    container.appendChild(trigger);
+    const wrap = document.createElement("div");
+    wrap.style.cursor = "pointer";
+    wrap.title = "Click to zoom";
+    wrap.addEventListener("click", () => openMermaidErOverlay(mermaidEr));
+
+    const mermaidDiv = document.createElement("div");
+    mermaidDiv.className = "mermaid";
+    mermaidDiv.textContent = mermaidEr;
+    wrap.appendChild(mermaidDiv);
+
+    const fallback = document.createElement("pre");
+    fallback.className = "mermaid-fallback";
+    fallback.style.display = "none";
+    fallback.style.marginTop = "8px";
+    fallback.style.whiteSpace = "pre-wrap";
+    fallback.style.font = "12px/1.4 ui-monospace,monospace";
+    fallback.style.color = "#333";
+    fallback.textContent = mermaidEr;
+    wrap.appendChild(fallback);
+
+    container.appendChild(wrap);
+    if (typeof mermaid !== "undefined") {
+      mermaid.run({ querySelector: "#er-diagram .mermaid" }).catch((error) => {
+        console.warn("Mermaid render failed; showing fallback.", error);
+        fallback.style.display = "block";
+      });
+    }
   }
 }
 
