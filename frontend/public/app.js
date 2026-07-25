@@ -39,6 +39,118 @@ function formatBytes(n) {
   return `${(n / 1048576).toFixed(2)} MB`;
 }
 
+function showToast(message, type = "info") {
+  let container = $("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.style.position = "fixed";
+    container.style.right = "16px";
+    container.style.bottom = "16px";
+    container.style.zIndex = "9999";
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "8px";
+    document.body.appendChild(container);
+  }
+  const el = document.createElement("div");
+  el.textContent = message;
+  el.style.padding = "10px 12px";
+  el.style.borderRadius = "6px";
+  el.style.background = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#1f2937";
+  el.style.color = "#fff";
+  el.style.font = "12px ui-sans-serif, system-ui, sans-serif";
+  el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.25)";
+  el.style.maxWidth = "320px";
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity 0.2s ease";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 200);
+  }, 2500);
+}
+
+function openPreview(rows, title) {
+  let overlay = $("preview-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "preview-overlay";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.zIndex = "9000";
+    overlay.style.background = "rgba(15,23,42,0.55)";
+    overlay.style.display = "none";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.padding = "24px";
+    document.body.appendChild(overlay);
+
+    const modal = document.createElement("div");
+    modal.id = "preview-modal";
+    modal.style.background = "#ffffff";
+    modal.style.borderRadius = "8px";
+    modal.style.maxWidth = "960px";
+    modal.style.width = "100%";
+    modal.style.maxHeight = "85vh";
+    modal.style.overflow = "auto";
+    modal.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+    modal.innerHTML = `
+      <div style="padding:12px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+        <strong id="preview-title">Preview</strong>
+        <button id="preview-close" style="background:#e5e7eb;border:0;border-radius:4px;padding:6px 10px;cursor:pointer;">Close</button>
+      </div>
+      <div id="preview-body" style="padding:12px 14px;"></div>
+    `;
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.style.display = "none";
+    });
+    modal.querySelector("#preview-close").addEventListener("click", () => {
+      overlay.style.display = "none";
+    });
+  }
+  const body = overlay.querySelector("#preview-body");
+  const titleEl = overlay.querySelector("#preview-title");
+  titleEl.textContent = title || "Preview";
+  body.innerHTML = "";
+  if (!Array.isArray(rows) || !rows.length) {
+    body.innerHTML = `<div class="muted">No rows available for preview.</div>`;
+  } else {
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.borderCollapse = "collapse";
+    table.style.font = "12px ui-sans-serif, system-ui, sans-serif";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    Object.keys(rows[0] || {}).forEach((col) => {
+      const th = document.createElement("th");
+      th.textContent = col;
+      th.style.textAlign = "left";
+      th.style.padding = "8px";
+      th.style.borderBottom = "1px solid #e5e7eb";
+      th.style.background = "#f8fafc";
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    rows.slice(0, 200).forEach((row) => {
+      const tr = document.createElement("tr");
+      Object.values(row).forEach((val) => {
+        const td = document.createElement("td");
+        td.textContent = val == null ? "" : String(val);
+        td.style.padding = "8px";
+        td.style.borderBottom = "1px solid #f1f5f9";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+  overlay.style.display = "flex";
+}
+
 async function loadHealth() {
   const badge = $("provider-badge");
   let provider = null;
@@ -191,9 +303,11 @@ async function createInvestigation() {
     renderPendingFiles();
     loadAssets();
     loadHistory();
+    showToast("New file ready.", "success");
   } catch (err) {
     errBox.textContent = err.message;
     errBox.hidden = false;
+    showToast(err.message, "error");
   } finally {
     $("create-btn").disabled = false;
     $("create-btn").textContent = "Create new file";
