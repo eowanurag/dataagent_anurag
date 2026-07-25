@@ -149,7 +149,6 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
         from src.db.models import InvestigationFileRow
 
         _init_schema()
-        file_ids = []
         with create_db_session() as session:
             rows = (
                 session.query(InvestigationFileRow)
@@ -162,35 +161,33 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
             return {"error": "No files are attached to this investigation yet. Upload CSV data before asking questions.", "file_ids": []}
         if len(file_ids) == 1:
             file_id = file_ids[0]
-            if len(file_ids) == 1:
-                file_id = file_ids[0]
-                columns_json = None
-                row_count = None
-                with create_db_session() as session:
-                    file_row = (
-                        session.query(InvestigationFileRow)
-                        .filter(InvestigationFileRow.file_id == file_id)
-                        .first()
-                    )
-                    if file_row is not None:
-                        columns_json = file_row.columns_json
-                        row_count = file_row.row_count
-                columns = json.loads(columns_json or "[]")
-                schema = {"columns": columns, "row_count": row_count or 0}
-                table = _resolve_table_name(file_id)
-                sql = f"SELECT {', '.join(schema['columns'])} FROM {table} LIMIT {get_settings().max_query_rows}"
-                df = query_sql(file_id, sql, max_rows=get_settings().max_query_rows)
-                return {
-                    "file_id": file_id,
-                    "file_ids": file_ids,
-                    "sql": sql,
-                    "sql_row_count": int(df.shape[0]),
-                    "sql_rows": df.head(200).to_dict(orient="records"),
-                    "answer_text": (
-                        f"Based on the uploaded data ({schema['row_count']} rows), "
-                        f"the result set has {df.shape[0]} rows."
-                    ),
-                }
+            columns_json = None
+            row_count = None
+            with create_db_session() as session:
+                file_row = (
+                    session.query(InvestigationFileRow)
+                    .filter(InvestigationFileRow.file_id == file_id)
+                    .first()
+                )
+                if file_row is not None:
+                    columns_json = file_row.columns_json
+                    row_count = file_row.row_count
+            columns = json.loads(columns_json or "[]")
+            schema = {"columns": columns, "row_count": row_count or 0}
+            table = _resolve_table_name(file_id)
+            sql = f"SELECT {', '.join(schema['columns'])} FROM {table} LIMIT {get_settings().max_query_rows}"
+            df = query_sql(file_id, sql, max_rows=get_settings().max_query_rows)
+            return {
+                "file_id": file_id,
+                "file_ids": file_ids,
+                "sql": sql,
+                "sql_row_count": int(df.shape[0]),
+                "sql_rows": df.head(200).to_dict(orient="records"),
+                "answer_text": (
+                    f"Based on the uploaded data ({schema['row_count']} rows), "
+                    f"the result set has {df.shape[0]} rows."
+                ),
+            }
         return {"file_ids": file_ids}
     except Exception as exc:  # noqa: BLE001
         log = get_logger("runner")

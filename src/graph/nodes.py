@@ -244,7 +244,7 @@ def validate_sql(state: AgentState) -> AgentState:
                 return {"error": f"sql contains forbidden token for single-file query: {token.strip()}", "status": "failed", "checkpoint": "validate_sql"}
         return {"checkpoint": "validate_sql"}
 
-    join_pattern = re.compile(r"\bJOIN\b\s+\w+\s+\bAS\b\s+\w+", normalized)
+    join_pattern = re.compile(r"\bJOIN\b\s+\w+\s+\bAS\b\s+\w+")
     join_count = len(re.findall(r"\bJOIN\b", normalized))
     if join_count != 1:
         return {"error": "multi-file sql requires exactly one JOIN with one alias", "status": "failed", "checkpoint": "validate_sql"}
@@ -252,7 +252,7 @@ def validate_sql(state: AgentState) -> AgentState:
         return {"error": "multi-file sql requires JOIN with a single alias", "status": "failed", "checkpoint": "validate_sql"}
     if not re.search(r"\bON\b", normalized):
         return {"error": "multi-file sql requires ON with join keys", "status": "failed", "checkpoint": "validate_sql"}
-    join_keys = re.findall(r"\bON\b\s+[^=]+=\s*[^=]+", normalized)
+    join_keys = re.findall(r"\bON\b", normalized)
     if len(join_keys) != 1:
         return {"error": "multi-file sql requires one join condition", "status": "failed", "checkpoint": "validate_sql"}
     return {"checkpoint": "validate_sql"}

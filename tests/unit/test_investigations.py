@@ -135,3 +135,31 @@ def test_unknown_investigation_is_404():
         assert client.get("/investigations/nope").status_code == 404
         assert client.get("/investigations/nope/history").status_code == 404
         assert client.post("/investigations/nope/runs", json={"question": "x"}).status_code == 404
+
+
+def test_get_er_diagram_returns_mermaid_and_relations(tmp_path, monkeypatch):
+    import os
+    storage = tmp_path / "storage"
+    storage.mkdir(exist_ok=True)
+    monkeypatch.setenv("AGENT_STORAGE_ROOT", str(storage))
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("AGENT_LLM_MODEL", "meta-llama/llama-3.1-70b-instruct")
+    monkeypatch.setenv("AGENT_NVIDIA_API_KEY", "")
+
+    client = TestClient(create_app())
+    res = client.post("/investigations", json={"title": "Temp schema asset check"})
+    assert res.status_code == 200
+    iid = res.json()["data"]["investigation_id"]
+
+    res = client.post(
+        f"/investigations/{iid}/files",
+        files={"file": ("sample.csv", "id,name\n1,alpha\n2,beta\n", "text/csv")},
+    )
+    assert res.status_code == 200
+
+    res = client.get(f"/investigations/{iid}/assets/er")
+    assert res.status_code == 200, res.text
+    data = res.json()["data"]
+    assert data["investigation_id"] == iid
+    assert "erDiagram" in data["mermaid_er"]
+    assert data["relations"] or data["entity_summary"]
