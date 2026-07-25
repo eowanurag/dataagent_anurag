@@ -758,19 +758,74 @@ function renderErDiagram(datasets, relations, mermaidEr) {
   const container = $("er-diagram");
   const summary = $("er-summary");
   if (summary) summary.textContent = `${datasets.length} datasets · ${relations.length} relationships inferred`;
-  let mermaidHtml = "";
+  container.innerHTML = "";
   if (typeof mermaidEr === "string" && mermaidEr.trim()) {
-    mermaidHtml = `<details style="margin-top:12px"><summary>Mermaid ER Diagram</summary><div class="mermaid">${mermaidEr}</div><pre class="mermaid-fallback" style="display:none;margin-top:8px;white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;color:#333;">${escapeHtml(mermaidEr)}</pre></details>`;
+    const trigger = document.createElement("button");
+    trigger.textContent = "Open Mermaid ER Diagram";
+    trigger.style.marginTop = "10px";
+    trigger.style.padding = "8px 10px";
+    trigger.style.borderRadius = "6px";
+    trigger.style.border = "1px solid #e5e7eb";
+    trigger.style.background = "#ffffff";
+    trigger.style.cursor = "pointer";
+    trigger.addEventListener("click", () => openMermaidErOverlay(mermaidEr));
+    container.appendChild(trigger);
   }
-  container.innerHTML = mermaidHtml;
-  if (typeof mermaidEr === "string" && mermaidEr.trim() && typeof mermaid !== "undefined") {
-    mermaid.run({ querySelector: ".mermaid" }).catch((error) => {
+}
+
+function openMermaidErOverlay(mermaidEr) {
+  let overlay = $("mermaid-er-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "mermaid-er-overlay";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.zIndex = "9100";
+    overlay.style.background = "rgba(15,23,42,0.55)";
+    overlay.style.display = "none";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.padding = "24px";
+    document.body.appendChild(overlay);
+
+    const modal = document.createElement("div");
+    modal.id = "mermaid-er-modal";
+    modal.style.background = "#ffffff";
+    modal.style.borderRadius = "8px";
+    modal.style.maxWidth = "1100px";
+    modal.style.width = "100%";
+    modal.style.maxHeight = "88vh";
+    modal.style.overflow = "auto";
+    modal.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+    modal.innerHTML = `
+      <div style="padding:12px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+        <strong>Mermaid ER Diagram</strong>
+        <div>
+          <button id="mermaid-er-minimize" style="background:#e5e7eb;border:0;border-radius:4px;padding:6px 10px;cursor:pointer;margin-right:8px;">Minimize</button>
+          <button id="mermaid-er-close" style="background:#e5e7eb;border:0;border-radius:4px;padding:6px 10px;cursor:pointer;">Close</button>
+        </div>
+      </div>
+      <div id="mermaid-er-body" style="padding:12px 14px;"></div>
+    `;
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.style.display = "none";
+    });
+    modal.querySelector("#mermaid-er-close").addEventListener("click", () => {
+      overlay.style.display = "none";
+    });
+    modal.querySelector("#mermaid-er-minimize").addEventListener("click", () => {
+      overlay.style.display = "none";
+    });
+  }
+  const body = overlay.querySelector("#mermaid-er-body");
+  body.innerHTML = `<div class="mermaid">${escapeHtml(mermaidEr)}</div><pre class="mermaid-fallback" style="display:none;margin-top:8px;white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;color:#333;">${escapeHtml(mermaidEr)}</pre>`;
+  overlay.style.display = "flex";
+  if (typeof mermaid !== "undefined") {
+    mermaid.run({ querySelector: "#mermaid-er-body .mermaid" }).catch((error) => {
       console.warn("Mermaid render failed; showing fallback.", error);
-      const fallback = container.querySelector(".mermaid-fallback");
+      const fallback = body.querySelector(".mermaid-fallback");
       if (fallback) fallback.hidden = false;
-      if (fallback) fallback.style.border = "1px solid #ddd";
-      if (fallback) fallback.style.padding = "8px";
-      if (fallback) fallback.style.background = "#fafafa";
     });
   }
 }
