@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 from typing import Any
 
+from sqlalchemy import text as sql_text
 from src.config.settings import get_settings
 from src.db.session import create_db_session
 
@@ -22,13 +23,15 @@ _mem: dict[str, dict[str, Any]] = {}
 def _ensure_schema() -> None:
     with create_db_session() as session:
         session.execute(
-            """
-            CREATE TABLE IF NOT EXISTS settings_store (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+            sql_text(
+                """
+                CREATE TABLE IF NOT EXISTS settings_store (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
             )
-            """
         )
         session.commit()
 
