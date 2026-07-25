@@ -627,14 +627,11 @@ function renderErDiagram(datasets, relations, mermaidEr) {
   const container = $("er-diagram");
   const summary = $("er-summary");
   if (summary) summary.textContent = `${datasets.length} datasets · ${relations.length} relationships inferred`;
-  const nodes = datasets.map(d => `<div class="er-node"><strong>${escapeHtml(d.name || d.id || d.investigation_id)}</strong><div class="muted">${(d.columns || []).slice(0, 6).join(", ")}${(d.columns || []).length > 6 ? " …" : ""}</div></div>`).join("");
-  const links = relations.slice(0, 50).map(r => `<div class="er-edge"><div><strong>${escapeHtml(r.label || r.src)}</strong> · ${escapeHtml(r.type || "1:1")} · confidence ${escapeHtml(String(Math.round((r.confidence || 0) * 100)))}%</div><div class="muted">${escapeHtml(r.src)} → ${escapeHtml(r.dst)}</div></div>`).join("");
-  const relationHtml = `<div class="er-graph"><div class="er-nodes">${nodes}</div><div class="er-links">${links}</div></div>`;
   let mermaidHtml = "";
   if (typeof mermaidEr === "string" && mermaidEr.trim()) {
     mermaidHtml = `<details style="margin-top:12px"><summary>Mermaid ER Diagram</summary><div class="mermaid">${mermaidEr}</div><pre class="mermaid-fallback" style="display:none;margin-top:8px;white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;color:#333;">${escapeHtml(mermaidEr)}</pre></details>`;
   }
-  container.innerHTML = relationHtml + mermaidHtml;
+  container.innerHTML = mermaidHtml;
   if (typeof mermaidEr === "string" && mermaidEr.trim() && typeof mermaid !== "undefined") {
     mermaid.run({ querySelector: ".mermaid" }).catch((error) => {
       console.warn("Mermaid render failed; showing fallback.", error);
