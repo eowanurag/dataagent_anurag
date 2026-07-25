@@ -178,6 +178,11 @@ async function uploadCsv() {
   const input = $("panel-file-input");
   const files = input.files && input.files.length ? Array.from(input.files) : [];
   if (!files.length) { errBox.textContent = "Choose CSV files first."; errBox.hidden = false; return; }
+  if (!currentInvestigationId) {
+    errBox.textContent = "Create a new file first, then upload CSVs into it.";
+    errBox.hidden = false;
+    return;
+  }
   selectedFileItems = files.map((file) => ({ file }));
   renderPendingFiles();
   $("upload-btn").disabled = true;

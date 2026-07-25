@@ -1,10 +1,14 @@
 """NVIDIA NIM provider — OpenAI-compatible chat/completions over httpx."""
 from __future__ import annotations
 
-import httpx
+import json
+import urllib.error
+import urllib.request
+from typing import Any
 
-from src.llm.providers.base import LLMError, LLMProvider
-from src.llm.retry import with_retries
+from src.llm.limiter import nvidia_limited
+from src.llm.providers.base import LLMError, LLMProvider, Usage
+from src.llm.retry import with_rate_limit_retries
 
 
 class NvidiaProvider(LLMProvider):
@@ -17,31 +21,58 @@ class NvidiaProvider(LLMProvider):
         self._base_url = (base_url or self._DEFAULT_BASE).rstrip("/")
 
     def complete(self, system: str, user: str, *, max_tokens: int = 1024) -> str:
-        def _call() -> str:
-            resp = httpx.post(
+        text, _ = self.complete_usage(system, user, max_tokens=max_tokens)
+        return text
+
+    def complete_usage(self, system: str, user: str, *, max_tokens: int = 1024) -> tuple[str, Usage]:
+        def _call() -> tuple[str, Usage]:
+            payload = json.dumps({
+                "model": self.model,
+                "max_tokens": max_tokens,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            }).encode("utf-8")
+            req = urllib.request.Request(
                 f"{self._base_url}/chat/completions",
+                data=payload,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "content-type": "application/json",
                 },
-                json={
-                    "model": self.model,
-                    "max_tokens": max_tokens,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                },
-                timeout=120.0,
+                method="POST",
             )
-            resp.raise_for_status()
-            data = resp.json()
             try:
-                text = (data["choices"][0]["message"]["content"] or "").strip()
-            except (KeyError, IndexError) as exc:
-                raise LLMError(f"nvidia returned no choices: {list(data)}") from exc
+                with urllib.request.urlopen(req, timeout=120.0) as r:
+                    body = json.loads(r.read())
+            except urllib.error.HTTPError as exc:
+                raise LLMError(
+                    f"nvidia: HTTP {exc.code} from provider"
+                ) from exc
+            except Exception as exc:
+                raise LLMError(f"nvidia: request failed: {exc}") from exc
+            try:
+                choice = (body.get("choices") or [{}])[0]
+                message = choice.get("message") or {}
+                text = (message.get("content") or "").strip()
+            except (IndexError, KeyError) as exc:
+                raise LLMError(f"nvidia returned no choices: {list(body)}") from exc
             if not text:
                 raise LLMError("nvidia returned an empty completion")
-            return text
+            usage_body = body.get("usage") or {}
+            return text, Usage(
+                input_tokens=int(usage_body.get("prompt_tokens") or 0) or None,
+                output_tokens=int(usage_body.get("completion_tokens") or 0) or None,
+            )
 
-        return with_retries(_call, provider=self.name)
+        return nvidia_limited(lambda: with_rate_limit_retries(_call, provider=self.name))
+
+    def cost_hint(self) -> dict[str, Any] | None:
+        return {
+            "provider": self.name,
+            "model": self.model,
+            "currency": "USD",
+            "per_million_in": None,
+            "per_million_out": None,
+        }

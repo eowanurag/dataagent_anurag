@@ -1,13 +1,14 @@
 """LLMClient — the one wrapper graph nodes call.
 
 Nodes never touch a provider directly; this keeps the capability slot
-provider-agnostic and gives one place for logging and prompt loading.
+provider-agnostic and gives one place for logging, prompt loading, and
+token/cost accounting.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from src.llm.providers.base import LLMProvider
+from src.llm.providers.base import LLMProvider, Usage
 from src.llm.providers.factory import create_llm_provider
 from src.observability.events import get_logger, log_span
 
@@ -23,6 +24,7 @@ class LLMClient:
     def __init__(self, provider: LLMProvider | None = None) -> None:
         self._provider = provider or create_llm_provider()
         self._log = get_logger("llm")
+        self.last_usage = Usage()
 
     @property
     def provider_name(self) -> str:
@@ -38,6 +40,18 @@ class LLMClient:
             provider=self._provider.name, model=self._provider.model,
             input_chars=len(user),
         ) as span:
-            text = self._provider.complete(system, user, max_tokens=max_tokens)
+            text, usage = self._complete_with_usage(system, user, max_tokens=max_tokens)
             span["output_chars"] = len(text)
+            span["input_tokens"] = usage.input_tokens
+            span["output_tokens"] = usage.output_tokens
+            self.last_usage = usage
             return text
+
+    def _complete_with_usage(self, system: str, user: str, *, max_tokens: int = 1024) -> tuple[str, Usage]:
+        if hasattr(self._provider, "complete_usage"):
+            try:
+                return self._provider.complete_usage(system, user, max_tokens=max_tokens)
+            except Exception:
+                pass
+        text = self._provider.complete(system, user, max_tokens=max_tokens)
+        return text, Usage()
