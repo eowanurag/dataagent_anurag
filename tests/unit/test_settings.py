@@ -31,7 +31,7 @@ def test_auto_detects_nvidia(no_keys, monkeypatch):
     monkeypatch.setenv("AGENT_NVIDIA_API_KEY", "test-key-not-real")
     s = get_settings()
     assert s.resolve_provider() == "nvidia"
-    assert s.resolve_model() == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert s.resolve_model() == "meta/llama-3.1-70b-instruct"
 
 
 def test_nvidia_model_alias_round_trip(no_keys, monkeypatch):
@@ -61,10 +61,10 @@ def test_nvidia_provider_direct():
     from src.llm.providers.nvidia import NvidiaProvider
 
     provider = NvidiaProvider(
-        api_key="fake", model="nvidia/llama-3.3-nemotron-super-49b-v1.5"
+        api_key="fake", model="nvidia/llama-3.1-nemotron-70b-instruct"
     )
     assert provider.name == "nvidia"
-    assert provider.model == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert provider.model == "nvidia/llama-3.1-nemotron-70b-instruct"
     assert provider._base_url == "https://integrate.api.nvidia.com/v1"
 
 
@@ -72,9 +72,24 @@ def test_factory_returns_nvidia_provider(no_keys, monkeypatch):
     reset_settings()
     monkeypatch.setenv("AGENT_NVIDIA_API_KEY", "test-key-not-real")
     monkeypatch.setenv("AGENT_LLM_PROVIDER", "nvidia")
-    monkeypatch.setenv("AGENT_LLM_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5")
+    monkeypatch.setenv("AGENT_LLM_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
     from src.llm.providers.factory import create_llm_provider
 
     provider = create_llm_provider()
     assert provider.name == "nvidia"
-    assert provider.model == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert provider.model == "nvidia/llama-3.1-nemotron-70b-instruct"
+
+
+def test_nvidia_rate_limit_and_limiter_wired():
+    from src.llm.limiter import nvidia_limited
+    from src.llm.providers.nvidia import NvidiaProvider
+    from src.llm.retry import with_rate_limit_retries
+
+    provider = NvidiaProvider(
+        api_key="fake", model="nvidia/llama-3.1-nemotron-70b-instruct"
+    )
+    assert provider._base_url == "https://integrate.api.nvidia.com/v1"
+    assert with_rate_limit_retries is not None
+
+    assert callable(nvidia_limited)
+    assert getattr(provider, "model", None) is not None

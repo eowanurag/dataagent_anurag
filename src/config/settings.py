@@ -14,7 +14,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.5-flash",
     "openrouter": "meta-llama/llama-3.1-70b-instruct",
-    "nvidia": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "nvidia": "meta/llama-3.1-70b-instruct",
 }
 
 
@@ -81,12 +81,7 @@ MODEL_ALIASES = {
     "openrouter": {
         "meta/llama-3.1-70b-instruct": "meta-llama/llama-3.1-70b-instruct",
     },
-    "nvidia": {
-        "meta/llama-3.1-nemotron-70b-instruct": "nvidia/llama-3.1-nemotron-70b-instruct",
-        "llama-3.1-nemotron-70b-instruct": "nvidia/llama-3.1-nemotron-70b-instruct",
-        "meta/llama-3.1-70b-instruct": "nvidia/llama-3.1-70b-instruct",
-        "llama-3.1-70b-instruct": "nvidia/llama-3.1-70b-instruct",
-    },
+    "nvidia": {},
 }
 
 
