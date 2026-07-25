@@ -7,6 +7,22 @@ let knownFileIds = new Set();
 let selectedFileItems = [];
 let pendingFileItems = [];
 
+const SESSION_KEY = "uppolice.lastInvestigationId";
+function loadSession() {
+  try {
+    const saved = localStorage.getItem(SESSION_KEY);
+    if (saved) currentInvestigationId = saved;
+  } catch {}
+}
+function saveSession() {
+  try {
+    if (currentInvestigationId) localStorage.setItem(SESSION_KEY, currentInvestigationId);
+  } catch {}
+}
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -154,6 +170,7 @@ async function createInvestigation() {
     const body = await res.json();
     if (!res.ok) throw new Error(body?.detail?.message || `HTTP ${res.status}`);
     currentInvestigationId = body.data.investigation_id;
+    saveSession();
     $("inv-id").innerHTML = `<span>Analysis file <strong>${escapeHtml(currentInvestigationId)}</strong></span>`;
     $("files-list").innerHTML = "";
     $("file-meta").textContent = "";
