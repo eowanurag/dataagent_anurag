@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from src.api._common import api_error, ok
 from src.config.settings import get_settings
+from src.services.settings_store import load_user_settings
 from src.db.models import RunRow
 from src.db.session import create_db_session, get_session
 from src.observability.events import get_logger, log_span
@@ -32,8 +33,18 @@ def _actor() -> dict[str, Any]:
     return {"user_id": "demo-user", "rank": None, "unit": None}
 
 
+def _effective_provider_model() -> tuple[str, str]:
+    s = get_settings()
+    saved = load_user_settings()
+    saved_provider = (saved.get("provider") or "").strip().lower()
+    saved_model = (saved.get("model") or "").strip()
+    provider = saved_provider or s.resolve_provider()
+    model = saved_model or s.resolve_model()
+    return provider, model
+
+
 def _init_schema() -> None:
-    from src.db.session import create_db_session
+
 
     statements = [
         """CREATE TABLE IF NOT EXISTS investigations (
@@ -313,6 +324,7 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
             source="csv",
             error_message="no files attached",
         )
+        provider, model = _effective_provider_model()
         return ok({
             "run_id": msg_id,
             "investigation_id": investigation_id,
@@ -326,8 +338,8 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
             "sql_row_count": None,
             "followup_suggestions": None,
             "error_message": "No files are attached to this investigation yet. Upload CSV data before asking questions.",
-            "provider": get_settings().resolve_provider(),
-            "model": get_settings().resolve_model(),
+            "provider": provider,
+            "model": model,
             "created_at": now,
             "latency_ms": None,
         })
@@ -356,15 +368,16 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
     followup_suggestions = None
     status = "completed"
 
+    provider, model = _effective_provider_model()
     run_row = RunRow(
         id=user_msg_id,
         status="running",
         input_text=question,
         instruction="investigation",
-        provider=get_settings().resolve_provider(),
-        model=get_settings().resolve_model(),
+        provider=provider,
+        model=model,
     )
-    session.add(run_row)
+
     session.commit()
     t0 = __import__("time").perf_counter()
     try:
@@ -451,8 +464,8 @@ def create_run(investigation_id: str, payload: dict[str, Any], session: Session 
         "sql_row_count": sql_row_count,
         "followup_suggestions": followup_suggestions,
         "error_message": answer_text if status == "failed" else None,
-        "provider": get_settings().resolve_provider(),
-        "model": get_settings().resolve_model(),
+        "provider": provider,
+        "model": model,
         "created_at": now,
         "latency_ms": latency_ms,
     })
