@@ -1,11 +1,12 @@
 """Provider factory — resolves provider + model from settings.
 
 ``auto`` picks whichever key is set. With no key at all we raise a clear,
-actionable error: the real provider is the default and the only gated path —
+actionable error: the real provider is the default and the only gated path — 
 there is no silent stub fallback (harness/rules/ai-agents.md rule 7).
 """
 from __future__ import annotations
 
+from src.config.settings import _normalize_model_name
 from src.config.settings import get_settings
 from src.llm.providers.anthropic import AnthropicProvider
 from src.llm.providers.base import LLMError, LLMProvider
