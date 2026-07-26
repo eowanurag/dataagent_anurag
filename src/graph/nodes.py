@@ -213,8 +213,8 @@ def generate_sql(state: AgentState) -> AgentState:
             "Multiple files are attached. If a cross-file query is needed, use explicit JOINs with table aliases only.\n"
         )
     try:
-        sql_text = _complete("generate_sql", system, user, max_tokens=256)
-        sql_text = sql_text.strip()
+        raw_sql = _complete("generate_sql", system, user, max_tokens=256)
+        sql_text = _strip_sql_text(raw_sql).strip()
         if not sql_text:
             return {"error": "sql generation returned empty", "status": "failed", "checkpoint": "generate_sql"}
         return {"sql": sql_text, "checkpoint": "generate_sql"}
@@ -395,6 +395,21 @@ def _is_number(value: Any) -> bool:
     if isinstance(value, str) and value.strip().replace(".", "", 1).replace("-", "", 1).isdigit():
         return True
     return False
+
+
+def _strip_sql_text(raw_text: str) -> str:
+    if not raw_text:
+        return ""
+    text = raw_text
+    for marker in ("```sql", "```"):
+        if marker in text:
+            idx = text.index(marker)
+            text = text[idx + len(marker):]
+            break
+    end = text.find("```")
+    if end != -1:
+        text = text[:end]
+    return text.strip().strip(";").strip()
 
 
 def handle_error(state: AgentState) -> AgentState:
