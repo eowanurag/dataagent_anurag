@@ -11,13 +11,19 @@ router = APIRouter()
 
 @router.get("/health")
 def health() -> dict:
+    from src.services.settings_store import load_user_settings
+
     s = get_settings()
-    provider = s.resolve_provider()
+    saved = load_user_settings()
+    saved_provider = (saved.get("provider") or "").strip().lower()
+    saved_model = (saved.get("model") or "").strip()
+    provider = saved_provider or s.resolve_provider()
+    model = saved_model or s.resolve_model()
     return ok(
         {
             "status": "ok",
             "provider": provider,
-            "model": s.resolve_model(),
+            "model": model,
             "key_configured": provider != "stub",
         }
     )

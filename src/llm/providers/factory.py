@@ -15,9 +15,15 @@ from src.llm.providers.openrouter import OpenRouterProvider
 
 
 def create_llm_provider() -> LLMProvider:
+    from src.services.settings_store import load_user_settings
+    saved = load_user_settings()
+    saved_provider = (saved.get("provider") or "").strip().lower()
+    saved_model = (saved.get("model") or "").strip()
+
     s = get_settings()
-    provider = s.resolve_provider()
-    model = s.resolve_model()
+    provider = saved_provider or s.resolve_provider()
+    model = saved_model or s.resolve_model()
+    model = _normalize_model_name(provider, model)
 
     if provider == "anthropic":
         return AnthropicProvider(api_key=s.anthropic_api_key, model=model)
