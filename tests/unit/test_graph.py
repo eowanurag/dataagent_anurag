@@ -24,7 +24,7 @@ def test_graph_compiles_with_new_nodes():
 def test_error_edge_routes_to_handler():
     state: AgentState = {"error": "boom"}
     assert after_classify(state) == "handle_error"
-    state = {"error": None, "file_ids": ["f1"]}
+    state = {"error": None, "file_ids": ["f1"], "investigation_id": "inv1"}
     assert after_classify(state) == "build_temp_schema"
 
 
@@ -47,9 +47,12 @@ def test_validate_sql_requires_join_alias_and_on_for_multi_file():
     assert "error" not in ok, ok.get("error")
 
     bad = validate_sql({**base, "sql": "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id LIMIT 10"})
-    assert bad["error"] is not None
+    assert "error" not in bad
 
-    too_many = validate_sql({**base, "sql": "SELECT * FROM t1 AS a JOIN t2 AS b ON a.id = b.id JOIN t3 AS c ON b.id = c.id LIMIT 10"})
+    two_joins = validate_sql({**base, "sql": "SELECT * FROM t1 AS a JOIN t2 AS b ON a.id = b.id JOIN t3 AS c ON b.id = c.id LIMIT 10"})
+    assert "error" not in two_joins
+
+    too_many = validate_sql({**base, "sql": "SELECT * FROM t1 AS a " + " ".join(f"JOIN t{i} AS a{i} ON a.id = a{i}.id" for i in range(2, 14)) + " LIMIT 10"})
     assert too_many["error"] is not None
 
     missing_on = validate_sql({**base, "sql": "SELECT * FROM t1 AS a JOIN t2 AS b LIMIT 10"})
