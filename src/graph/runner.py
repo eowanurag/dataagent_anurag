@@ -19,7 +19,7 @@ from src.graph.agent import agentic_ai
 from src.graph.state import AgentState
 from src.observability.events import get_logger, log_span
 from src.services.storage import write_attachment
-from src.tools.csv_tool import _resolve_table_name, inspect_schema, query_sql
+from src.tools.csv_tool import _resolve_table_name, build_temp_schema, inspect_schema, query_sql
 
 try:
     from src.api.investigations import _init_schema  # noqa: PLC0415
