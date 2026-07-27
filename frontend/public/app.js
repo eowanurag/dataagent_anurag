@@ -520,7 +520,7 @@ function renderChart(spec, container) {
   if (spec.type === "pie") {
     const total = values.reduce((sum, value) => sum + value, 0) || 1;
     let angle = -Math.PI / 2;
-    const palette = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#9333ea", "#0891b2", "#db2777", "#475569"];
+    const palette = ["hsl(224, 76%, 48%)", "hsl(158, 64%, 52%)", "hsl(346, 84%, 61%)", "hsl(43, 96%, 56%)", "hsl(283, 39%, 53%)", "hsl(187, 72%, 42%)", "hsl(316, 73%, 52%)", "hsl(215, 25%, 27%)"];
     values.forEach((value, index) => {
       const slice = (value / total) * 2 * Math.PI;
       ctx.beginPath();
@@ -564,7 +564,7 @@ function renderChart(spec, container) {
       const barHeight = value * yUnit;
       const x = startX + index * (barWidth + gap);
       const y = padding.top + chartHeight - barHeight;
-      ctx.fillStyle = index === 0 ? "#2563eb" : "#60a5fa";
+      ctx.fillStyle = index === 0 ? "hsl(224, 76%, 48%)" : "hsl(224, 76%, 68%)";
       ctx.fillRect(x - barWidth / 2, y, barWidth, barHeight);
       if (value === minimumNonZero) {
         ctx.fillStyle = "#dc2626";

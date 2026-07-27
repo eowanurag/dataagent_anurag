@@ -9,6 +9,7 @@ from src.graph.edges import (
     after_execute_query,
     after_generate_sql,
     after_plan,
+    after_select_tables,
     after_synthesize_answer,
     after_transform,
     after_validate_sql,
@@ -21,6 +22,7 @@ from src.graph.nodes import (
     generate_sql,
     handle_error,
     plan,
+    select_tables,
     synthesize_answer,
     transform_text,
     validate_sql,
@@ -34,6 +36,7 @@ def _build_graph():
     g.add_node("classify_source", classify_source)
     g.add_node("build_temp_schema", build_temp_schema_node)
     g.add_node("plan", plan)
+    g.add_node("select_tables", select_tables)
     g.add_node("generate_sql", generate_sql)
     g.add_node("validate_sql", validate_sql)
     g.add_node("execute_query", execute_query)
@@ -44,7 +47,8 @@ def _build_graph():
     g.set_entry_point("classify_source")
     g.add_conditional_edges("classify_source", after_classify, {"build_temp_schema": "build_temp_schema", "transform_text": "transform_text", "plan": "plan", "handle_error": "handle_error"})
     g.add_conditional_edges("build_temp_schema", after_build_temp_schema, {"plan": "plan", "handle_error": "handle_error"})
-    g.add_conditional_edges("plan", after_plan, {"generate_sql": "generate_sql", "handle_error": "handle_error"})
+    g.add_conditional_edges("plan", after_plan, {"select_tables": "select_tables", "handle_error": "handle_error"})
+    g.add_conditional_edges("select_tables", after_select_tables, {"generate_sql": "generate_sql", "handle_error": "handle_error"})
     g.add_conditional_edges("generate_sql", after_generate_sql, {"validate_sql": "validate_sql", "handle_error": "handle_error"})
     g.add_edge("validate_sql", "execute_query")
     g.add_conditional_edges("execute_query", after_execute_query, {"synthesize_answer": "synthesize_answer", "handle_error": "handle_error"})

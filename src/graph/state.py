@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     question: str
     file_id: str | None
     file_ids: list[str] | None
+    selected_tables: list[str] | None
     temp_schema: dict[str, Any] | None
     plan: str | None
     sql: str | None
@@ -27,6 +28,8 @@ class AgentState(TypedDict, total=False):
     provider: str | None
     model: str | None
     input_text: str | None
+    instruction: str | None
+    output_text: str | None
     usage: dict[str, Any] | None
     chart_type: str | None
     chart_x: str | None

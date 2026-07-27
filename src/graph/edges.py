@@ -14,10 +14,18 @@ def after_transform(state: AgentState) -> str:
 def after_classify(state: AgentState) -> str:
     if state.get("error"):
         return "handle_error"
+    if not state.get("investigation_id"):
+        return "transform_text"
     return "build_temp_schema"
 
 
 def after_plan(state: AgentState) -> str:
+    if state.get("error"):
+        return "handle_error"
+    return "select_tables"
+
+
+def after_select_tables(state: AgentState) -> str:
     if state.get("error"):
         return "handle_error"
     return "generate_sql"
