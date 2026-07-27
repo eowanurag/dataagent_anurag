@@ -122,6 +122,7 @@ def run_investigation_graph(
         "source": source,
         "file_id": file_ids[0] if len(file_ids) == 1 else None,
         "file_ids": file_ids,
+        "temp_schema": payload.get("temp_schema") if isinstance(payload, dict) else None,
         "error": None,
         "meta": {},
     }
@@ -188,7 +189,8 @@ def _probe_csv_for_file_id(investigation_id: str) -> dict[str, Any]:
                     f"the result set has {df.shape[0]} rows."
                 ),
             }
-        return {"file_ids": file_ids}
+        temp_schema = build_temp_schema(file_ids)
+        return {"file_ids": file_ids, "temp_schema": temp_schema}
     except Exception as exc:  # noqa: BLE001
         log = get_logger("runner")
         log.exception("_probe_csv_for_file_id_failed", investigation_id=investigation_id, error=str(exc))
