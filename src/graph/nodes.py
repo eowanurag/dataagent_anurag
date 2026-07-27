@@ -310,6 +310,11 @@ def validate_sql(state: AgentState) -> AgentState:
     join_keys = re.findall(r"\bON\b", normalized)
     if join_count > 0 and len(join_keys) != join_count:
         return {"error": "multi-file sql requires one join condition per JOIN", "status": "failed", "checkpoint": "validate_sql"}
+
+    schema_validation = _validate_sql_columns_against_schema(state, normalized, sql)
+    if schema_validation:
+        return schema_validation
+
     return {"checkpoint": "validate_sql"}
 
 
@@ -480,6 +485,51 @@ def _strip_sql_text(raw_text: str) -> str:
     if end != -1:
         text = text[:end]
     return text.strip().strip(";").strip()
+
+
+def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql: str) -> dict[str, Any] | None:
+    temp_schema = state.get("temp_schema")
+    file_ids = [fid for fid in (state.get("file_ids") or []) if fid]
+    if not temp_schema or not isinstance(temp_schema, dict):
+        return None
+    tables = temp_schema.get("tables") or []
+    allowed_columns: set[str] = set()
+    alias_map: dict[str, str] = {}
+    for table in tables:
+        table_name = table.get("table_name") or ""
+        columns = table.get("columns") or []
+        alias_map[table_name.lower()] = table_name
+        for col in columns:
+            allowed_columns.add(f"{table_name}.{col}".lower())
+            allowed_columns.add(col.lower())
+
+    aliases = re.findall(r"\b([A-Za-z0-9_]+)\s+AS\s+([A-Za-z0-9_]+)\b", normalized)
+    extra_aliases = re.findall(r"\bJOIN\s+[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)?\b", normalized)
+    for match in aliases:
+        source_table, alias = match
+        alias_map[alias.lower()] = source_table.lower()
+    tokens = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in {"select", "from", "where", "order", "group", "by", "having", "limit", "offset", "and", "or", "on", "join", "left", "right", "inner", "outer", "cross", "as", "in", "is", "null", "not", "distinct", "case", "when", "then", "else", "end"}]
+
+    referenced_columns: list[str] = []
+    for token in tokens:
+        if "." in token:
+            parts = token.split(".")
+            if len(parts) == 2:
+                table_part, column_part = parts
+                table_key = alias_map.get(table_part.lower(), table_part.lower())
+                referenced_columns.append(f"{table_key}.{column_part}".lower())
+        else:
+            referenced_columns.append(token.lower())
+
+    disallowed = [col for col in referenced_columns if col not in allowed_columns]
+    if disallowed:
+        unique = sorted({col for col in disallowed})[:10]
+        return {
+            "error": f"sql references unlisted columns: {', '.join(unique)}. Use only the exact columns listed in the attached file schemas.",
+            "status": "failed",
+            "checkpoint": "validate_sql",
+        }
+    return None
 
 
 def handle_error(state: AgentState) -> AgentState:
