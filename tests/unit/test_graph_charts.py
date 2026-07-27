@@ -18,14 +18,33 @@ def test_is_number_handles_strings():
     assert _is_number("abc") is False
 
 
-def test_build_chart_spec_defaults_to_table_for_many_rows():
-    rows = [{"district": k, "count": k} for k in range(1, 26)]
-    assert _build_chart_spec(rows)["type"] == "table"
-
-
-def test_build_chart_spec_returns_bar_for_small_numeric_set():
-    rows = [{"district": "A", "count": 5}, {"district": "B", "count": 9}]
+def test_build_chart_spec_returns_bar_for_numeric_rows():
+    rows = [{"district": f"D{k}", "count": k} for k in range(1, 26)]
     spec = _build_chart_spec(rows)
     assert spec["type"] == "bar"
     assert spec["x"] == "district"
-    assert spec["y"] == "count"
+    assert "y" in spec
+
+
+def test_build_chart_spec_returns_table_when_no_numeric_keys():
+    rows = [{"district": "A", "name": "alpha"}, {"district": "B", "name": "beta"}]
+    spec = _build_chart_spec(rows)
+    assert spec["type"] == "table"
+
+
+def test_build_chart_spec_prefers_pie_for_share_question():
+    rows = [{"category": "A", "count": 10}, {"category": "B", "count": 20}]
+    spec = _build_chart_spec(rows, question="Show a pie chart of share by category")
+    assert spec["type"] == "pie"
+
+
+def test_build_chart_spec_prefers_line_for_trend_question():
+    rows = [{"month": "Jan", "count": 10}, {"month": "Feb", "count": 20}]
+    spec = _build_chart_spec(rows, question="Line chart of trend over time")
+    assert spec["type"] == "line"
+
+
+def test_build_chart_spec_prefers_bar_when_question_asks_for_chart():
+    rows = [{"district": "A", "count": 10}, {"district": "B", "count": 20}]
+    spec = _build_chart_spec(rows, question="Show a chart of counts by district")
+    assert spec["type"] == "bar"

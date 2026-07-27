@@ -111,6 +111,46 @@ def build_temp_schema_node(state: AgentState) -> AgentState:
         return {"error": f"temp schema build failed: {exc}", "status": "failed", "checkpoint": "build_temp_schema"}
 
 
+def select_tables(state: AgentState) -> AgentState:
+    source = state.get("source") or "csv"
+    question = state.get("question") or ""
+    file_ids = state.get("file_ids") or ([state.get("file_id")] if state.get("file_id") else [])
+    file_ids = [fid for fid in file_ids if fid]
+    
+    if source != "csv" or len(file_ids) <= 1:
+        return {"selected_tables": [_resolve_table_name(f) for f in file_ids], "checkpoint": "select_tables"}
+        
+    schema_summary = ""
+    try:
+        temp_schema = state.get("temp_schema")
+        if temp_schema and isinstance(temp_schema.get("tables"), list) and temp_schema["tables"]:
+            schema_summary = "\n".join(
+                f"table={t.get('table_name')}, columns={', '.join(t.get('columns') or [])}"
+                for t in temp_schema["tables"]
+            )
+        else:
+            schema_summary = "unknown schemas"
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"schema lookup failed: {exc}", "status": "failed", "checkpoint": "select_tables"}
+
+    system = "You are a database architect. Your job is to select the minimal set of tables needed to answer the user's question. Return ONLY a JSON array of table names. No markdown, no explanation."
+    user = (
+        f"Available tables and columns:\n{schema_summary}\n\n"
+        f"Question: {question}\n\n"
+        f"Return ONLY a JSON array of the required table names, e.g. [\"t_1\", \"t_2\"]."
+    )
+    try:
+        response_text = _complete("select_tables", system, user, max_tokens=128)
+        cleaned = response_text.replace("```json", "").replace("```", "").strip()
+        selected = json.loads(cleaned)
+        if not isinstance(selected, list):
+            selected = [_resolve_table_name(f) for f in file_ids]
+    except Exception:  # noqa: BLE001
+        selected = [_resolve_table_name(f) for f in file_ids]
+        
+    return {"selected_tables": selected, "checkpoint": "select_tables"}
+
+
 def plan(state: AgentState) -> AgentState:
     investigation_id = state.get("investigation_id")
     question = state.get("question") or ""
@@ -174,8 +214,10 @@ def generate_sql(state: AgentState) -> AgentState:
     temp_schema = state.get("temp_schema")
     file_ids = state.get("file_ids") or ([state.get("file_id")] if state.get("file_id") else [])
     file_ids = [fid for fid in file_ids if fid]
+    selected_tables = state.get("selected_tables")
 
     schema_summary = ""
+    relationships_summary = ""
     try:
         if source == "csv":
             if not file_ids:
@@ -185,15 +227,30 @@ def generate_sql(state: AgentState) -> AgentState:
                     "checkpoint": "generate_sql",
                 }
             if temp_schema and isinstance(temp_schema.get("tables"), list) and temp_schema["tables"]:
+                tables_to_include = temp_schema["tables"]
+                if selected_tables is not None:
+                    tables_to_include = [t for t in tables_to_include if t.get('table_name') in selected_tables]
+                if not tables_to_include:
+                    tables_to_include = temp_schema["tables"] # fallback
+                    
                 schema_summary = "\n".join(
                     f"table={t.get('table_name')}, columns={', '.join(t.get('columns') or [])}"
-                    for t in temp_schema["tables"]
+                    for t in tables_to_include
                 )
+                
+                rels = temp_schema.get("relationships") or []
+                if rels:
+                    relationships_summary = "\nDetected Relationships:\n" + "\n".join(
+                        f"- {r.get('from_table')}.{r.get('from_col')} = {r.get('to_table')}.{r.get('to_col')} (confidence: {r.get('confidence')}%)"
+                        for r in rels
+                    )
             else:
                 inspected = []
                 for file_id in file_ids:
-                    schema = inspect_schema(file_id)
-                    inspected.append((_resolve_table_name(file_id), schema))
+                    table_name = _resolve_table_name(file_id)
+                    if selected_tables is None or table_name in selected_tables:
+                        schema = inspect_schema(file_id)
+                        inspected.append((table_name, schema))
                 schema_summary = "\n".join(
                     f"table={table}, columns={', '.join(schema['columns'])}"
                     for table, schema in inspected
@@ -205,6 +262,7 @@ def generate_sql(state: AgentState) -> AgentState:
     user = (
         f"Source: {source}\n"
         f"Schema/columns:\n{schema_summary}\n"
+        f"{relationships_summary}\n"
         f"Question: {question}\n"
         f"Row limit: {row_limit}\n"
     )
@@ -244,17 +302,14 @@ def validate_sql(state: AgentState) -> AgentState:
                 return {"error": f"sql contains forbidden token for single-file query: {token.strip()}", "status": "failed", "checkpoint": "validate_sql"}
         return {"checkpoint": "validate_sql"}
 
-    join_pattern = re.compile(r"\bJOIN\b\s+\w+\s+\bAS\b\s+\w+")
     join_count = len(re.findall(r"\bJOIN\b", normalized))
-    if join_count != 1:
-        return {"error": "multi-file sql requires exactly one JOIN with one alias", "status": "failed", "checkpoint": "validate_sql"}
-    if not join_pattern.search(normalized):
-        return {"error": "multi-file sql requires JOIN with a single alias", "status": "failed", "checkpoint": "validate_sql"}
-    if not re.search(r"\bON\b", normalized):
+    if join_count > 10:
+        return {"error": "multi-file sql requires at most 10 JOINs", "status": "failed", "checkpoint": "validate_sql"}
+    if not re.search(r"\bON\b", normalized) and join_count > 0:
         return {"error": "multi-file sql requires ON with join keys", "status": "failed", "checkpoint": "validate_sql"}
     join_keys = re.findall(r"\bON\b", normalized)
-    if len(join_keys) != 1:
-        return {"error": "multi-file sql requires one join condition", "status": "failed", "checkpoint": "validate_sql"}
+    if join_count > 0 and len(join_keys) != join_count:
+        return {"error": "multi-file sql requires one join condition per JOIN", "status": "failed", "checkpoint": "validate_sql"}
     return {"checkpoint": "validate_sql"}
 
 
@@ -310,7 +365,7 @@ def synthesize_answer(state: AgentState) -> AgentState:
     sql_row_count = state.get("sql_row_count") or 0
     source = state.get("source") or "csv"
 
-    chart_spec = _build_chart_spec(sql_rows)
+    chart_spec = _build_chart_spec(sql_rows, question=question)
     sample_rows = sql_rows[:50]
     system = load_prompt("synthesize")
     user = (
@@ -346,17 +401,18 @@ def synthesize_answer(state: AgentState) -> AgentState:
     }
 
 
-def _build_chart_spec(rows: list[dict]) -> dict[str, Any]:
+def _build_chart_spec(rows: list[dict], question: str = "") -> dict[str, Any]:
     if not rows:
         return {"type": "empty", "data": []}
     numeric_keys = _infer_numeric_keys(rows)
     string_keys = _infer_string_keys(rows)
-    chart_type = "table"
+    preferred_type = _infer_preferred_chart_type(question, rows)
+    chart_type = preferred_type
     x = string_keys[0] if string_keys else (list(rows[0].keys())[0] if rows[0] else None)
     y = numeric_keys[0] if numeric_keys else None
-    if len(rows) <= 20 and x and y:
-        chart_type = "bar"
-    if chart_type == "table" and len(rows) > 0:
+    if chart_type in {"bar", "line", "pie"} and not (x and y):
+        chart_type = "table"
+    if chart_type == "table":
         return {"type": "table", "data": rows[:250], "columns": list(rows[0].keys())}
     return {
         "type": chart_type,
@@ -365,6 +421,20 @@ def _build_chart_spec(rows: list[dict]) -> dict[str, Any]:
         "y": y,
         "columns": list(rows[0].keys()) if rows else [],
     }
+
+
+def _infer_preferred_chart_type(question: str, rows: list[dict]) -> str:
+    q = (question or "").lower()
+    if any(token in q for token in ["pie", "share", "share of", "breakdown", "proportion", "percentage"]):
+        return "pie"
+    if any(token in q for token in ["line", "trend", "over time", "time series", "monthly", "daily", "yearly"]):
+        return "line"
+    if any(token in q for token in ["chart", "graph", "plot", "visual", "bar", "ranked", "top", "bottom", "highest", "lowest"]):
+        return "bar"
+    numeric_keys = _infer_numeric_keys(rows)
+    if numeric_keys:
+        return "bar"
+    return "table"
 
 
 def _infer_numeric_keys(rows: list[dict]) -> list[str]:
