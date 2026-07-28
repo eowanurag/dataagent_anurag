@@ -319,7 +319,71 @@ def validate_sql(state: AgentState) -> AgentState:
     if schema_validation:
         return schema_validation
 
+    semantic_validation = _validate_sql_semantic_joins(state, sql)
+    if semantic_validation:
+        return semantic_validation
+
     return {"checkpoint": "validate_sql"}
+
+def _validate_sql_semantic_joins(state: AgentState, sql: str) -> dict[str, Any] | None:
+    file_ids = [fid for fid in (state.get("file_ids") or []) if fid]
+    if len(file_ids) <= 1:
+        return None
+
+    temp_schema = state.get("temp_schema")
+    table_schemas: dict[str, dict[str, Any]] = {}
+    try:
+        if isinstance(temp_schema, dict) and isinstance(temp_schema.get("tables"), list):
+            for table in temp_schema["tables"]:
+                name = table.get("table_name")
+                cols = [str(col).lower() for col in (table.get("columns") or [])]
+                if name:
+                    table_schemas[name] = {"columns": set(cols)}
+        else:
+            for file_id in file_ids:
+                schema = inspect_schema(file_id)
+                table_schemas[_resolve_table_name(file_id)] = {
+                    "columns": {str(col).lower() for col in schema.get("columns") or []},
+                }
+    except Exception:
+        return None
+
+    alias_pattern = re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)\b", sql, flags=re.IGNORECASE)
+    alias_map: dict[str, str] = {alias: name.upper() for name, alias in alias_pattern}
+
+    if not alias_map:
+        return None
+
+    relations = []
+    if isinstance(temp_schema, dict):
+        relations = temp_schema.get("relationships") or []
+    candidate_join_columns: set[str] = set()
+    for rel in relations:
+        for key in ("from_col", "to_col"):
+            col = rel.get(key)
+            if col:
+                candidate_join_columns.add(str(col).lower())
+    for schema in table_schemas.values():
+        candidate_join_columns |= {col for col in schema["columns"] if any(token in col for token in ["id", "_id", "key", "code", "ref"])}
+
+    on_matches = re.findall(r"\bON\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:AND\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*[A-Za-z_][A-Za-z0-9_]*)*", sql, flags=re.IGNORECASE)
+    for left, right in on_matches:
+        left_alias = alias_map.get(left.upper(), left.upper())
+        right_alias = alias_map.get(right.upper(), right.upper())
+        left_table = alias_map.get(left.upper())
+        right_table = alias_map.get(right.upper())
+        left_schema = table_schemas.get(left_table)
+        right_schema = table_schemas.get(right_table)
+        left_col = left.lower()
+        right_col = right.lower()
+        if left_schema and right_schema:
+            if left_col not in left_schema["columns"] or right_col not in right_schema["columns"]:
+                return {"error": "sql join uses a column not present in the attached file schema", "status": "failed", "checkpoint": "validate_sql"}
+            if not candidate_join_columns or (left_col not in candidate_join_columns or right_col not in candidate_join_columns):
+                return {"error": "sql join columns do not match any available join keys between the provided files", "status": "failed", "checkpoint": "validate_sql"}
+        elif left_schema or right_schema:
+            return {"error": "sql join references an alias without a matching table", "status": "failed", "checkpoint": "validate_sql"}
+    return None
 
 
 def execute_query(state: AgentState) -> AgentState:
