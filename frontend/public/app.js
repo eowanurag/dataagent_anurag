@@ -597,7 +597,7 @@ async function askQuestion() {
   status.textContent = "Analysing…";
   status.hidden = false;
   try {
-    const bodyPayload = { question };
+    const bodyPayload = { question, investigation_id: currentInvestigationId };
     const fileIds = Array.from(knownFileIds).filter(Boolean);
     if (fileIds.length) bodyPayload.file_ids = fileIds;
     const res = await fetch(`/investigations/${encodeURIComponent(currentInvestigationId)}/runs`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify(bodyPayload) });
