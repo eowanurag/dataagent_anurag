@@ -500,17 +500,14 @@ def _validate_sql_dialect(sql: str) -> dict[str, Any] | None:
 
 def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql: str) -> dict[str, Any] | None:
     temp_schema = state.get("temp_schema")
-    file_ids = [fid for fid in (state.get("file_ids") or []) if fid]
     if not temp_schema or not isinstance(temp_schema, dict):
         return None
     tables = temp_schema.get("tables") or []
     allowed_columns: set[str] = set()
-    table_names: set[str] = set()
     alias_map: dict[str, str] = {}
     for table in tables:
         table_name = table.get("table_name") or ""
         columns = table.get("columns") or []
-        table_names.add(table_name.lower())
         alias_map[table_name.lower()] = table_name
         for col in columns:
             allowed_columns.add(f"{table_name}.{col}".lower())
@@ -521,23 +518,10 @@ def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql
         source_table, alias = match
         alias_map[alias.lower()] = source_table.lower()
 
-    sql_keywords = {"select", "from", "where", "order", "group", "by", "having", "limit", "offset", "and", "or", "on", "join", "left", "right", "inner", "outer", "cross", "as", "in", "is", "null", "not", "distinct", "case", "when", "then", "else", "end", "count", "sum", "avg", "min", "max", "coalesce", "nullif", "cast", "integer", "text", "real", "blob", "asc", "desc", "true", "false", "like", "escape", "exists", "between", "union", "all", "except", "intersect"}
-    ignore_identifiers = set(sql_keywords)
-    ignore_identifiers.update(table_names)
-    ignore_identifiers.update(file_id.lower() for file_id in file_ids if file_id)
-    ignore_identifiers.update(alias.lower() for alias in alias_map)
-
-    candidates = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in ignore_identifiers and not token.isdigit()]
     referenced_columns: list[str] = []
-    for token in candidates:
-        if "." in token:
-            parts = token.split(".")
-            if len(parts) == 2:
-                table_part, column_part = parts
-                table_key = alias_map.get(table_part.lower(), table_part.lower())
-                referenced_columns.append(f"{table_key}.{column_part}".lower())
-        else:
-            referenced_columns.append(token.lower())
+    for table_part, column_part in re.findall(r"\b([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\b", sql):
+        table_key = alias_map.get(table_part.lower(), table_part.lower())
+        referenced_columns.append(f"{table_key}.{column_part}".lower())
 
     disallowed = [col for col in referenced_columns if col not in allowed_columns]
     if disallowed:
