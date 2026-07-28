@@ -527,7 +527,7 @@ def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql
     ignore_identifiers.update(file_id.lower() for file_id in file_ids if file_id)
     ignore_identifiers.update(alias.lower() for alias in alias_map)
 
-    candidates = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in ignore_identifiers]
+    candidates = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in ignore_identifiers and not token.isdigit()]
     referenced_columns: list[str] = []
     for token in candidates:
         if "." in token:
