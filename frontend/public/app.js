@@ -443,12 +443,19 @@ function renderChart(spec, container) {
     return false;
   };
 
+  const _fmt = (value) => {
+    if (Number.isInteger(value)) return String(value);
+    if (Math.abs(value) >= 1000) return value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    if (Math.abs(value) >= 1) return value.toLocaleString("en-IN", { maximumFractionDigits: 1 });
+    return value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  };
+
   const keys = Object.keys(spec.data[0]);
   const xKey = spec.x || keys[0];
   const yKey = spec.y || keys.find((key) => isNumeric(spec.data[0][key])) || keys[1];
 
-  const stepCount = (spec.type === "pie" ? 16 : 26);
-  const maxLabel = (spec.type === "pie" ? 12 : 18);
+  const stepCount = (spec.type === "pie" ? 12 : 24);
+  const maxLabel = (spec.type === "pie" ? 14 : 18);
   const dataSet = spec.data.slice(0, stepCount);
   const labels = dataSet.map((item) => String(item[xKey] ?? "").slice(0, maxLabel));
   const values = dataSet.map((item) => {
@@ -456,11 +463,15 @@ function renderChart(spec, container) {
     return Number.isFinite(raw) ? raw : 0;
   });
 
+  const titleEl = document.createElement("div");
+  titleEl.className = "chart-title";
+  titleEl.textContent = `${spec.type === "pie" ? "Breakdown" : spec.type === "line" ? "Trend" : "Ranked counts"} — ${yKey} by ${xKey}`;
+  container.appendChild(titleEl);
+
   const canvas = document.createElement("canvas");
   canvas.style.width = "100%";
-  canvas.style.maxWidth = "720px";
-  canvas.style.height = "360px";
-  container.innerHTML = "";
+  canvas.style.maxWidth = "760px";
+  canvas.style.height = "340px";
   container.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
@@ -479,14 +490,43 @@ function renderChart(spec, container) {
   ctx.fillRect(0, 0, width, height);
 
   const maxValue = Math.max(...values, 1);
-  const minimumNonZero = values.filter((value) => value > 0).sort((a, b) => a - b)[0] || 0;
+  const gridColor = getComputedStyle(document.body).getPropertyValue("--chart-grid").trim() || "rgba(100,116,139,0.18)";
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(padding.left + chartWidth, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
 
-  const contextRow = $("usage-context");
-  if (contextRow) contextRow.textContent = `${spec.type} | x=${xKey}, y=${yKey}`;
+  ctx.strokeStyle = "rgba(71,85,105,0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top);
+  ctx.lineTo(padding.left, padding.top + chartHeight);
+  ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+  ctx.stroke();
+
+  for (let i = 0; i <= 4; i++) {
+    const tick = (maxValue * (4 - i)) / 4;
+    const y = padding.top + (chartHeight * i) / 4;
+    ctx.fillStyle = "#475569";
+    ctx.font = "11px ui-monospace,monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(_fmt(tick), padding.left - 8, y + 4);
+  }
+
+  const sorted = dataSet.map((item, i) => ({ index: i, value: values[i], label: labels[i] })).sort((a, b) => b.value - a.value);
+  const topIndex = sorted[0]?.index;
 
   if (spec.type === "line") {
     ctx.strokeStyle = "#2563eb";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
     const xUnit = chartWidth / Math.max(labels.length - 1, 1);
     const yUnit = chartHeight / maxValue;
     ctx.beginPath();
@@ -500,16 +540,16 @@ function renderChart(spec, container) {
     labels.forEach((label, index) => {
       const x = padding.left + index * xUnit;
       const y = padding.top + chartHeight - values[index] * yUnit;
-      if (values[index] === minimumNonZero) {
+      if (index === topIndex) {
         ctx.fillStyle = "#dc2626";
         ctx.beginPath();
         ctx.arc(x, y, 5, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = "#64748b";
+      ctx.fillStyle = "#334155";
       ctx.font = "12px ui-monospace,monospace";
       ctx.save();
-      ctx.translate(x, padding.top + chartHeight + 16);
+      ctx.translate(x, padding.top + chartHeight + 18);
       ctx.rotate(Math.PI / (labels.length > 12 ? 4 : 6));
       ctx.fillText(label, 0, 0);
       ctx.restore();
@@ -520,7 +560,7 @@ function renderChart(spec, container) {
   if (spec.type === "pie") {
     const total = values.reduce((sum, value) => sum + value, 0) || 1;
     let angle = -Math.PI / 2;
-    const palette = ["hsl(224, 76%, 48%)", "hsl(158, 64%, 52%)", "hsl(346, 84%, 61%)", "hsl(43, 96%, 56%)", "hsl(283, 39%, 53%)", "hsl(187, 72%, 42%)", "hsl(316, 73%, 52%)", "hsl(215, 25%, 27%)"];
+    const palette = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#9333ea", "#0891b2", "#db2777", "#475569"];
     values.forEach((value, index) => {
       const slice = (value / total) * 2 * Math.PI;
       ctx.beginPath();
@@ -528,11 +568,15 @@ function renderChart(spec, container) {
       ctx.arc(width / 2, height / 2, Math.min(chartWidth, chartHeight) / 2 - 12, angle, angle + slice);
       ctx.fillStyle = palette[index % palette.length];
       ctx.fill();
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--chart-fill").trim() || "#ffffff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       if (slice > 0.08) {
         const mid = angle + slice / 2;
-        const labelRadius = (Math.min(chartWidth, chartHeight) / 2 - 36) / 2 + 12;
+        const labelRadius = (Math.min(chartWidth, chartHeight) / 2 - 40) / 2 + 16;
         ctx.fillStyle = "#ffffff";
         ctx.font = "12px ui-monospace,monospace";
+        ctx.textAlign = "center";
         ctx.save();
         ctx.translate(width / 2 + Math.cos(mid) * labelRadius, height / 2 + Math.sin(mid) * labelRadius);
         ctx.rotate(mid + Math.PI / 2);
@@ -541,45 +585,64 @@ function renderChart(spec, container) {
       }
       angle += slice;
     });
+
+    const legendX = padding.left + chartWidth + 8;
+    let legendY = padding.top;
+    ctx.textAlign = "left";
+    ctx.font = "12px ui-monospace,monospace";
+    values.forEach((value, index) => {
+      const pct = ((value / total) * 100).toFixed(1) + "%";
+      ctx.fillStyle = palette[index % palette.length];
+      ctx.fillRect(legendX, legendY + 2, 10, 10);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillText(`${labels[index]}`, legendX + 14, legendY + 12);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(`${_fmt(value)} (${pct})`, legendX + 14, legendY + 26);
+      legendY += 34;
+    });
     canvas.style.height = "320px";
     return;
   }
 
   const barCount = values.length;
-  const gap = 8;
+  const gap = 10;
   const barWidth = Math.max((chartWidth - gap * (barCount + 1)) / barCount, 4);
   const startX = padding.left + gap + barWidth / 2;
   const yUnit = chartHeight / maxValue;
+  const palette = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#9333ea", "#0891b2", "#db2777", "#475569"];
 
-  ctx.strokeStyle = "#334155";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top);
-  ctx.lineTo(padding.left, padding.top + chartHeight);
-  ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
-  ctx.stroke();
-
-  if (spec.type === "bar") {
-    values.forEach((value, index) => {
-      const barHeight = value * yUnit;
-      const x = startX + index * (barWidth + gap);
-      const y = padding.top + chartHeight - barHeight;
-      ctx.fillStyle = index === 0 ? "hsl(224, 76%, 48%)" : "hsl(224, 76%, 68%)";
-      ctx.fillRect(x - barWidth / 2, y, barWidth, barHeight);
-      if (value === minimumNonZero) {
-        ctx.fillStyle = "#dc2626";
-        ctx.fillRect(x - barWidth / 2, y, barWidth, Math.max(barHeight, 8));
-      }
-      ctx.fillStyle = "#334155";
-      ctx.font = "11px ui-monospace,monospace";
-      ctx.save();
-      ctx.translate(x, padding.top + chartHeight + 12);
-      ctx.rotate(Math.PI / (barCount > 10 ? 5 : 7));
-      ctx.fillText(labels[index], 0, 0);
-      ctx.restore();
-    });
-    return;
-  }
+  values.forEach((value, index) => {
+    const barHeight = value * yUnit;
+    const x = startX + index * (barWidth + gap);
+    const y = padding.top + chartHeight - barHeight;
+    const isTop = index === topIndex;
+    ctx.fillStyle = isTop ? "#1d4ed8" : palette[index % palette.length];
+    ctx.beginPath();
+    const radius = Math.min(barWidth / 2, 6);
+    if (barHeight > radius * 2) {
+      ctx.moveTo(x - barWidth / 2, y + barHeight);
+      ctx.lineTo(x - barWidth / 2, y + radius);
+      ctx.quadraticCurveTo(x - barWidth / 2, y, x - barWidth / 2 + radius, y);
+      ctx.lineTo(x + barWidth / 2 - radius, y);
+      ctx.quadraticCurveTo(x + barWidth / 2, y, x + barWidth / 2, y + radius);
+      ctx.lineTo(x + barWidth / 2, y + barHeight);
+    } else if (barHeight > 0) {
+      ctx.rect(x - barWidth / 2, y, barWidth, barHeight);
+    }
+    ctx.fill();
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "11px ui-monospace,monospace";
+    ctx.textAlign = "center";
+    const labelY = Math.max(y - 8, padding.top + 12);
+    ctx.fillText(_fmt(value), x, labelY);
+    ctx.fillStyle = "#334155";
+    ctx.textAlign = "center";
+    ctx.save();
+    ctx.translate(x, padding.top + chartHeight + 16);
+    ctx.rotate(Math.PI / (barCount > 12 ? 5 : 7));
+    ctx.fillText(labels[index], 0, 0);
+    ctx.restore();
+  });
 
   container.innerHTML = '<div class="muted">Chart type not supported yet.</div>';
 }

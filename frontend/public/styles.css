@@ -207,7 +207,8 @@ pre#answer {
   background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
   padding: 14px; white-space: pre-wrap; word-wrap: break-word; margin: 0;
 }
-.chart-wrap { margin-top: 10px; overflow-x: auto; }
+.chart-wrap { margin-top: 12px; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface); }
+.chart-title { margin: 0 0 10px; font-size: 0.95rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.2px; }
 .citations { margin-top: 10px; color: var(--muted); font-size: 0.88rem; }
 .citations-block summary { cursor: pointer; color: var(--text-secondary); font-weight: 500; }
 .cite-list { padding-left: 18px; margin-top: 6px; }
