@@ -494,24 +494,31 @@ def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql
         return None
     tables = temp_schema.get("tables") or []
     allowed_columns: set[str] = set()
+    table_names: set[str] = set()
     alias_map: dict[str, str] = {}
     for table in tables:
         table_name = table.get("table_name") or ""
         columns = table.get("columns") or []
+        table_names.add(table_name.lower())
         alias_map[table_name.lower()] = table_name
         for col in columns:
             allowed_columns.add(f"{table_name}.{col}".lower())
             allowed_columns.add(col.lower())
 
     aliases = re.findall(r"\b([A-Za-z0-9_]+)\s+AS\s+([A-Za-z0-9_]+)\b", normalized)
-    extra_aliases = re.findall(r"\bJOIN\s+[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)?\b", normalized)
     for match in aliases:
         source_table, alias = match
         alias_map[alias.lower()] = source_table.lower()
-    tokens = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in {"select", "from", "where", "order", "group", "by", "having", "limit", "offset", "and", "or", "on", "join", "left", "right", "inner", "outer", "cross", "as", "in", "is", "null", "not", "distinct", "case", "when", "then", "else", "end"}]
 
+    sql_keywords = {"select", "from", "where", "order", "group", "by", "having", "limit", "offset", "and", "or", "on", "join", "left", "right", "inner", "outer", "cross", "as", "in", "is", "null", "not", "distinct", "case", "when", "then", "else", "end", "count", "sum", "avg", "min", "max", "coalesce", "nullif", "cast", "integer", "text", "real", "blob", "asc", "desc", "true", "false", "like", "escape", "exists", "between", "union", "all", "except", "intersect"}
+    ignore_identifiers = set(sql_keywords)
+    ignore_identifiers.update(table_names)
+    ignore_identifiers.update(file_id.lower() for file_id in file_ids if file_id)
+    ignore_identifiers.update(alias.lower() for alias in alias_map)
+
+    candidates = [token for token in re.findall(r"[A-Za-z0-9_]+", sql) if token.lower() not in ignore_identifiers]
     referenced_columns: list[str] = []
-    for token in tokens:
+    for token in candidates:
         if "." in token:
             parts = token.split(".")
             if len(parts) == 2:
