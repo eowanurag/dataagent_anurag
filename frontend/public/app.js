@@ -182,11 +182,18 @@ async function loadModelUsage(provider, model) {
 
   if (providerText) providerText.textContent = provider ? String(provider).toUpperCase() : "—";
   if (modelText) modelText.textContent = model || "—";
-  if (lastIo) lastIo.textContent = "— / —";
-  if (todayIo) todayIo.textContent = "0 / 0 / 0";
-  if (contextRow) contextRow.textContent = "0 / 10,00,000";
-  if (datasetsRow) datasetsRow.textContent = "0 · 0";
-  if (costRow) costRow.textContent = "$0.00000";
+  let usage = JSON.parse(localStorage.getItem('token_usage')) || {
+    lastIn: 0, lastOut: 0, todayIn: 0, todayOut: 0, todayQueries: 0, contextUsed: 0, costEstimate: 0
+  };
+  if (lastIo) lastIo.textContent = `${usage.lastIn} / ${usage.lastOut}`;
+  if (todayIo) todayIo.textContent = `${usage.todayIn} / ${usage.todayOut} / ${usage.todayQueries}`;
+  if (contextRow) contextRow.textContent = `${usage.contextUsed} / 10,00,000`;
+  let totalRows = 0;
+  if (selectedFileItems && selectedFileItems.length > 0) {
+    totalRows = selectedFileItems.reduce((acc, f) => acc + (f.row_count || 0), 0);
+  }
+  if (datasetsRow) datasetsRow.textContent = `${knownFileIds.size} · ${totalRows}`;
+  if (costRow) costRow.textContent = `$${usage.costEstimate.toFixed(5)}`;
   if (modelSelect) modelSelect.innerHTML = "";
   if (providerSelect) providerSelect.innerHTML = "";
 
@@ -611,38 +618,41 @@ function renderChart(spec, container) {
   const yUnit = chartHeight / maxValue;
   const palette = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#9333ea", "#0891b2", "#db2777", "#475569"];
 
-  values.forEach((value, index) => {
-    const barHeight = value * yUnit;
-    const x = startX + index * (barWidth + gap);
-    const y = padding.top + chartHeight - barHeight;
-    const isTop = index === topIndex;
-    ctx.fillStyle = isTop ? "#1d4ed8" : palette[index % palette.length];
-    ctx.beginPath();
-    const radius = Math.min(barWidth / 2, 6);
-    if (barHeight > radius * 2) {
-      ctx.moveTo(x - barWidth / 2, y + barHeight);
-      ctx.lineTo(x - barWidth / 2, y + radius);
-      ctx.quadraticCurveTo(x - barWidth / 2, y, x - barWidth / 2 + radius, y);
-      ctx.lineTo(x + barWidth / 2 - radius, y);
-      ctx.quadraticCurveTo(x + barWidth / 2, y, x + barWidth / 2, y + radius);
-      ctx.lineTo(x + barWidth / 2, y + barHeight);
-    } else if (barHeight > 0) {
-      ctx.rect(x - barWidth / 2, y, barWidth, barHeight);
-    }
-    ctx.fill();
-    ctx.fillStyle = "#e2e8f0";
-    ctx.font = "11px ui-monospace,monospace";
-    ctx.textAlign = "center";
-    const labelY = Math.max(y - 8, padding.top + 12);
-    ctx.fillText(_fmt(value), x, labelY);
-    ctx.fillStyle = "#334155";
-    ctx.textAlign = "center";
-    ctx.save();
-    ctx.translate(x, padding.top + chartHeight + 16);
-    ctx.rotate(Math.PI / (barCount > 12 ? 5 : 7));
-    ctx.fillText(labels[index], 0, 0);
-    ctx.restore();
-  });
+  if (spec.type === "bar") {
+    values.forEach((value, index) => {
+      const barHeight = value * yUnit;
+      const x = startX + index * (barWidth + gap);
+      const y = padding.top + chartHeight - barHeight;
+      const isTop = index === topIndex;
+      ctx.fillStyle = isTop ? "#1d4ed8" : palette[index % palette.length];
+      ctx.beginPath();
+      const radius = Math.min(barWidth / 2, 6);
+      if (barHeight > radius * 2) {
+        ctx.moveTo(x - barWidth / 2, y + barHeight);
+        ctx.lineTo(x - barWidth / 2, y + radius);
+        ctx.quadraticCurveTo(x - barWidth / 2, y, x - barWidth / 2 + radius, y);
+        ctx.lineTo(x + barWidth / 2 - radius, y);
+        ctx.quadraticCurveTo(x + barWidth / 2, y, x + barWidth / 2, y + radius);
+        ctx.lineTo(x + barWidth / 2, y + barHeight);
+      } else if (barHeight > 0) {
+        ctx.rect(x - barWidth / 2, y, barWidth, barHeight);
+      }
+      ctx.fill();
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "11px ui-monospace,monospace";
+      ctx.textAlign = "center";
+      const labelY = Math.max(y - 8, padding.top + 12);
+      ctx.fillText(_fmt(value), x, labelY);
+      ctx.fillStyle = "#334155";
+      ctx.textAlign = "center";
+      ctx.save();
+      ctx.translate(x, padding.top + chartHeight + 16);
+      ctx.rotate(Math.PI / (barCount > 12 ? 5 : 7));
+      ctx.fillText(labels[index], 0, 0);
+      ctx.restore();
+    });
+    return;
+  }
 
   container.innerHTML = '<div class="muted">Chart type not supported yet.</div>';
 }
@@ -673,6 +683,21 @@ async function askQuestion() {
     }
     appendMessage("user", question, [], null, null, false, []);
     appendMessage("assistant", data.answer_text, data.citations || [], data.sql, data.latency_ms, false, data.followup_suggestions || []);
+    
+    // Update Token Usage and Cost Estimate
+    let inTokens = Math.ceil(question.length / 4) + (knownFileIds.size > 0 ? 350 : 0);
+    let outTokens = Math.ceil((data.answer_text || "").length / 4) + Math.ceil((data.sql || "").length / 4);
+    let usage = JSON.parse(localStorage.getItem('token_usage')) || { lastIn: 0, lastOut: 0, todayIn: 0, todayOut: 0, todayQueries: 0, contextUsed: 0, costEstimate: 0 };
+    usage.lastIn = inTokens;
+    usage.lastOut = outTokens;
+    usage.todayIn += inTokens;
+    usage.todayOut += outTokens;
+    usage.todayQueries += 1;
+    usage.contextUsed += (inTokens + outTokens);
+    usage.costEstimate += (inTokens * 0.15 / 1000000) + (outTokens * 0.60 / 1000000);
+    localStorage.setItem('token_usage', JSON.stringify(usage));
+    loadModelUsage($("provider-select")?.value, $("model-select")?.value);
+
     $("answer").textContent = data.answer_text || "";
     $("followups").innerHTML = "";
     if (Array.isArray(data.followup_suggestions) && data.followup_suggestions.length) {
