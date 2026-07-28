@@ -63,3 +63,33 @@ def test_validate_sql_blocks_join_tokens_in_single_file():
     state: AgentState = {"sql": "SELECT * FROM t AS x JOIN y ON x.id = y.id"}
     out = validate_sql(state)
     assert out["error"] is not None
+
+
+def test_validate_sql_columns_against_schema_allows_exact_columns_and_rejects_bad_aliases():
+    state: AgentState = {
+        "file_ids": ["f1", "f2"],
+        "temp_schema": {
+            "tables": [
+                {"table_name": "files", "columns": ["DISTRICT", "CRIME_HEAD_CD"]},
+                {"table_name": "incidents", "columns": ["DISTRICT", "INCIDENT_ID"]},
+            ]
+        },
+        "sql": "SELECT T1.DISTRICT, T1.CRIME_HEAD_CD, T2.DISTRICT, COUNT(T2.INCIDENT_ID) FROM files AS T1 INNER JOIN incidents AS T2 ON T1.DISTRICT = T2.DISTRICT GROUP BY T1.DISTRICT, T1.CRIME_HEAD_CD ORDER BY COUNT(T2.INCIDENT_ID) DESC LIMIT 5000",
+    }
+    out = validate_sql(state)
+    assert "error" not in out, out.get("error")
+
+    bad_alias_state = {
+        **state,
+        "sql": "SELECT T2.DISTRICT, T2.CRIME_HEAD_CD FROM files AS T1 INNER JOIN incidents AS T2 ON T1.DISTRICT = T2.CRIME_HEAD_CD",
+    }
+    bad = validate_sql(bad_alias_state)
+    assert bad["error"] is not None
+    assert "unlisted columns" in bad["error"]
+
+    bare_token_state = {
+        **state,
+        "sql": "SELECT crime, cyber, 5000, DISTRICT FROM files",
+    }
+    out = validate_sql(bare_token_state)
+    assert "error" not in out, out.get("error")
