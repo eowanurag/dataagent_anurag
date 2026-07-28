@@ -577,7 +577,7 @@ def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql
             allowed_columns.add(f"{table_name}.{col}".lower())
             allowed_columns.add(col.lower())
 
-    aliases = re.findall(r"\b([A-Za-z0-9_]+)\s+AS\s+([A-Za-z0-9_]+)\b", normalized)
+    aliases = re.findall(r"\b([A-Za-z0-9_]+)\s+AS\s+([A-Za-z0-9_]+)\b", normalized, flags=re.IGNORECASE)
     for match in aliases:
         source_table, alias = match
         alias_map[alias.lower()] = source_table.lower()

@@ -155,19 +155,26 @@ def export_investigation_pdf(
     story.append(Spacer(1, 10))
 
     chart_images = [item for item in (payload.chart_images if payload else []) if isinstance(item, str) and item.strip()]
+    assistant_image_iter = iter(
+        part.split(",", 1)[1]
+        for part in chart_images
+        if part.startswith("data:") and "," in part
+    )
+
     for idx, row in enumerate(rows, start=1):
         story.append(Paragraph(f"{idx}. {row['role']}", styles["Heading3"]))
         story.append(Paragraph((row["content"] or "").replace("\n", "<br/>"), styles["BodyText"]))
         citations = row.get("citations") or []
         if citations:
             story.append(Paragraph("<b>Citations:</b> " + "; ".join(citations), styles["Normal"]))
-        if chart_images and row.get("role") == "assistant":
-            image_index = min(idx - 1, len(chart_images) - 1)
-            img_data = base64.b64decode(chart_images[image_index])
-            img_buf = io.BytesIO(img_data)
+        if row.get("role") == "assistant":
             try:
+                img_data = base64.b64decode(next(assistant_image_iter))
+                img_buf = io.BytesIO(img_data)
                 story.append(Spacer(1, 6))
                 story.append(Image(img_buf, width=460, height=260, kind="proportional"))
+            except StopIteration:
+                pass
             except Exception as exc:  # noqa: BLE001
                 log.warning("pdf_image_embed_failed", error=str(exc))
         story.append(Spacer(1, 10))
