@@ -141,46 +141,57 @@ def export_investigation_pdf(
     if not rows:
         raise api_error("not_found", "no history to export", 404)
 
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=48, leftMargin=48, topMargin=48, bottomMargin=48)
-    styles = getSampleStyleSheet()
-    story = []
-    story.append(Paragraph(f"Investigation {investigation_id}", styles["Title"]))
-    story.append(Paragraph(f"Exported: {_now_iso()}", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
     chart_images = [item for item in (payload.chart_images if payload else []) if isinstance(item, str) and item.strip()]
-    assistant_image_iter = iter(
-        part.split(",", 1)[1]
-        for part in chart_images
-        if part.startswith("data:") and "," in part
+    log.info(
+        "pdf_export_start",
+        investigation_id=investigation_id,
+        row_count=len(rows),
+        chart_count=len(chart_images),
     )
 
-    for idx, row in enumerate(rows, start=1):
-        story.append(Paragraph(f"{idx}. {row['role']}", styles["Heading3"]))
-        story.append(Paragraph((row["content"] or "").replace("\n", "<br/>"), styles["BodyText"]))
-        citations = row.get("citations") or []
-        if citations:
-            story.append(Paragraph("<b>Citations:</b> " + "; ".join(citations), styles["Normal"]))
-        if row.get("role") == "assistant":
-            try:
-                img_data = base64.b64decode(next(assistant_image_iter))
-                img_buf = io.BytesIO(img_data)
-                story.append(Spacer(1, 6))
-                story.append(Image(img_buf, width=460, height=260, kind="proportional"))
-            except StopIteration:
-                pass
-            except Exception as exc:  # noqa: BLE001
-                log.warning("pdf_image_embed_failed", error=str(exc))
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=48, leftMargin=48, topMargin=48, bottomMargin=48)
+        styles = getSampleStyleSheet()
+        story = []
+        story.append(Paragraph(f"Investigation {investigation_id}", styles["Title"]))
+        story.append(Paragraph(f"Exported: {_now_iso()}", styles["Normal"]))
         story.append(Spacer(1, 10))
 
-    doc.build(story)
-    pdf = buf.getvalue()
+        assistant_image_iter = iter(
+            part.split(",", 1)[1]
+            for part in chart_images
+            if part.startswith("data:") and "," in part
+        )
+
+        for idx, row in enumerate(rows, start=1):
+            story.append(Paragraph(f"{idx}. {row['role']}", styles["Heading3"]))
+            story.append(Paragraph((row["content"] or "").replace("\n", "<br/>"), styles["BodyText"]))
+            citations = row.get("citations") or []
+            if citations:
+                story.append(Paragraph("<b>Citations:</b> " + "; ".join(citations), styles["Normal"]))
+            if row.get("role") == "assistant":
+                try:
+                    img_data = base64.b64decode(next(assistant_image_iter))
+                    img_buf = io.BytesIO(img_data)
+                    story.append(Spacer(1, 6))
+                    story.append(Image(img_buf, width=460, height=260, kind="proportional"))
+                except StopIteration:
+                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("pdf_image_embed_failed", investigation_id=investigation_id, error=str(exc))
+            story.append(Spacer(1, 10))
+
+        doc.build(story)
+        pdf = buf.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        log.error("pdf_export_failed", investigation_id=investigation_id, error=str(exc))
+        raise api_error("server_error", "pdf export failed", 500) from exc
 
     record_audit(
         investigation_id=investigation_id,
@@ -191,6 +202,7 @@ def export_investigation_pdf(
         payload={"format": "pdf"},
     )
 
+    log.info("pdf_export_complete", investigation_id=investigation_id, pdf_size=len(pdf))
     return Response(
         content=pdf,
         media_type="application/pdf",
