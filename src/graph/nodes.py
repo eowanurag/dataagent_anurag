@@ -311,6 +311,10 @@ def validate_sql(state: AgentState) -> AgentState:
     if join_count > 0 and len(join_keys) != join_count:
         return {"error": "multi-file sql requires one join condition per JOIN", "status": "failed", "checkpoint": "validate_sql"}
 
+    dialect_error = _validate_sql_dialect(sql)
+    if dialect_error:
+        return dialect_error
+
     schema_validation = _validate_sql_columns_against_schema(state, normalized, sql)
     if schema_validation:
         return schema_validation
@@ -485,6 +489,13 @@ def _strip_sql_text(raw_text: str) -> str:
     if end != -1:
         text = text[:end]
     return text.strip().strip(";").strip()
+
+
+def _validate_sql_dialect(sql: str) -> dict[str, Any] | None:
+    normalized = sql.upper()
+    if "TOP " in normalized:
+        return {"error": "sql contains invalid SQLite syntax: TOP. Use LIMIT instead.", "status": "failed", "checkpoint": "validate_sql"}
+    return None
 
 
 def _validate_sql_columns_against_schema(state: AgentState, normalized: str, sql: str) -> dict[str, Any] | None:
